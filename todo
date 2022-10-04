@@ -1,0 +1,59 @@
+Main Features:
+
+A couple of UV unwrapping operators, that leave the texture alone.
+Maybe with toggles to enable "snap internals verts to pixels" or
+only "snap bounds to pixels"
+ 
+ - [x] GRID MAPPING
+ - [x] EXTEND UNWRAP
+ - [x] UNWRAP TO SINGLE PIXEL 
+ - [ ] COPY/PASTE UV
+
+Then one operator to reorganize the UV map, this is dangerous
+because actual image pixels will be moved. Another operator
+to clean out the palette because direct texture paint
+doesn't always paint with full opacity.
+ 
+ - [x] REPACK UVS
+ - [ ] PALETTE CLEANUP
+
+
+Common utilities that are needed:
+
+ - [x] find a free section for UV island
+
+ - [ ] toggle for snap to pixel
+ - [ ] copy uv / set to unique
+ - [x] fill texture pink
+
+ - [x] "island to free space" must also be able to do "selection (only) to free space"
+
+
+https://twitter.com/moons_artwork
+
+
+TESTING REMARKS:
+
+ - [x] need a 'magic' unwrap, that extends triangles if they are included
+ - [x] grid map should compute pixel size per column, and then size to that, instead of snapping afterwards
+ - [x] preserve overlapping islands when repacking
+
+ - [x] map single pixel would be very useful
+ - [x] grid map should deal with multiple "quad islands" and not just bork on that (brute forced it...)
+ - [ ] copy paste uv is necessary
+ - [ ] flip might be useful for copy paste?
+ - [ ] some error when unwrapping grid where a row_sizes entry stays empty
+
+
+CROCOJAM FINDINGS:
+
+ - Need a way to pick colors quickly (from palette)
+ - Need a way to set brush size quickly
+ - "Selection to Free Space" is super unintuitive currently. It just doesn't seem to work? I'm not sure if 
+  it depends on pinned islands or ALL islands (for determining free space). If it's the latter, then
+  the plugin might need a button to 'clear all UVs' (basically assigning them to somewhere outside the UV map)
+  so that the whole texture becomes free space.
+ - Definitely need a way to EITHER duplicate UV islands (from same geometry) OR deal with multiple objects
+  (to allow for linked meshes to be painted at the same time). For the latter, it'd have to be possible to
+  detect UV islands from OTHER models.
+ - Triangles get stuck when using "FOLD X / FOLD Y"
