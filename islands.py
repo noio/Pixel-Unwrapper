@@ -7,7 +7,7 @@ from bmesh.types import BMesh, BMFace
 
 from mathutils import Vector
 
-from .common import Vector2Int, RectInt, elem_max, elem_min
+from .common import Vector2Int, RectInt, any_pinned, elem_max, elem_min
 
 
 class UVFace:
@@ -41,8 +41,11 @@ class UVFace:
         self.max = ma
 
 
-class UVFaceSet:
-    faces: "list[UVFace]"
+class UVIsland:
+    """Set of UV faces, usually an Island"""
+
+    mesh: "BMesh"
+    uv_faces: "list[UVFace]"
     num_uv: int
     group: int = -1
     max: Vector
@@ -51,8 +54,9 @@ class UVFaceSet:
     pixel_pos: RectInt = None
     uv_layer: any
 
-    def __init__(self, bmfaces: "list[BMFace]", uv_layer):
-        self.faces = [UVFace(f, uv_layer) for f in bmfaces]
+    def __init__(self, bmfaces: "list[BMFace]", mesh: "BMesh", uv_layer):
+        self.mesh = mesh
+        self.uv_faces = [UVFace(f, uv_layer) for f in bmfaces]
         self.uv_layer = uv_layer
         self.calc_info()
 
@@ -61,7 +65,7 @@ class UVFaceSet:
         self.min = Vector((10000000.0, 10000000.0))
         self.average_uv = Vector((0.0, 0.0))
         self.num_uv = 0
-        for face in self.faces:
+        for face in self.uv_faces:
 
             self.average_uv += sum(
                 (l[self.uv_layer].uv for l in face.face.loops), Vector((0, 0))
@@ -93,7 +97,7 @@ class UVFaceSet:
 
             self.pixel_pos = RectInt(mi, ma)
 
-    def merge(self, other: "UVFaceSet"):
+    def merge(self, other: "UVIsland"):
         self.max = elem_max(self.max, other.max)
         self.min = elem_min(self.min, other.min)
 
@@ -102,50 +106,72 @@ class UVFaceSet:
             (self.average_uv * self.num_uv) + (other.average_uv * other.num_uv)
         ) / (self.num_uv + other.num_uv)
 
-        self.faces.extend(other.faces)
+        self.uv_faces.extend(other.uv_faces)
         self.num_uv += other.num_uv
 
         if self.pixel_pos is not None and other.pixel_pos is not None:
             self.pixel_pos.encapsulate(other.pixel_pos)
 
+    def get_faces(self):
+        return (uv_face.face for uv_face in self.uv_faces)
 
-def get_island_info(obj, only_selected=True) -> "list[UVFaceSet]":
-    bm = bmesh.from_edit_mesh(obj.data)
-    bm.faces.ensure_lookup_table()
-
-    return get_island_info_from_bmesh(bm, only_selected)
+    def is_any_pinned(self):
+        return any_pinned(self.get_faces(), self.mesh.loops.layers.uv.verify())
 
 
-def get_island_info_from_bmesh(bm, only_selected=True) -> "list[UVFaceSet]":
-    if not bm.loops.layers.uv:
+def get_islands_from_obj(obj, only_selected=True) -> "list[UVIsland]":
+    if obj.data.is_editmode:
+        mesh = bmesh.from_edit_mesh(obj.data)
+    else:
+        mesh = bmesh.new() 
+        mesh.from_mesh(obj.data)
+
+    mesh.faces.ensure_lookup_table()
+
+    return get_islands_from_mesh(mesh, only_selected)
+
+
+def get_islands_from_mesh(mesh: "BMesh", only_selected=True) -> "list[UVIsland]":
+    if not mesh.loops.layers.uv:
         return None
-    uv_layer = bm.loops.layers.uv.verify()
+    uv_layer = mesh.loops.layers.uv.verify()
 
     if only_selected:
-        selected_faces = [f for f in bm.faces if f.select]
+        selected_faces = [f for f in mesh.faces if f.select]
     else:
-        selected_faces = [f for f in bm.faces]
+        selected_faces = [f for f in mesh.faces]
 
-    return get_island_info_from_faces(bm, selected_faces, uv_layer)
+    return get_islands_for_faces(mesh, selected_faces, uv_layer)
 
 
-def get_island_info_from_faces(bm, faces, uv_layer) -> "list[UVFaceSet]":
-    ftv, vtf = __create_vert_face_mapping(faces, uv_layer)
+def get_islands_for_faces(mesh: "BMesh", faces, uv_layer) -> "list[UVIsland]":
 
-    uv_island_lists = []
-    all_face_indices = ftv.keys()
+    # Build two lookups for
+    # all verts that makes up a face
+    # all faces using a vert
+    # Lookups are by INDEX
+    face_to_verts = defaultdict(set)
+    vert_to_faces = defaultdict(set)
+    for f in faces:
+        for l in f.loops:
+            id_ = l[uv_layer].uv.to_tuple(5), l.vert.index
+            face_to_verts[f.index].add(id_)
+            vert_to_faces[id_].add(f.index)
+
+    all_face_indices = face_to_verts.keys()
 
     def connected_faces(face_idx):
-        for vid in ftv[face_idx]:
-            for conn_face_idx in vtf[vid]:
+        for vid in face_to_verts[face_idx]:
+            for conn_face_idx in vert_to_faces[vid]:
                 yield conn_face_idx
 
     face_idx_islands = get_connected_components(all_face_indices, connected_faces)
     islands = []
     for face_idx_island in face_idx_islands:
         islands.append(
-            UVFaceSet(
-                [bm.faces[face_idx] for face_idx in face_idx_island],
+            UVIsland(
+                [mesh.faces[face_idx] for face_idx in face_idx_island],
+                mesh,
                 uv_layer,
             )
         )
@@ -153,7 +179,7 @@ def get_island_info_from_faces(bm, faces, uv_layer) -> "list[UVFaceSet]":
     return islands
 
 
-def merge_overlapping_islands(islands: "list[UVFaceSet]") -> "list[UVFaceSet]":
+def merge_overlapping_islands(islands: "list[UVIsland]") -> "list[UVIsland]":
     """
     Check each pair of islands to see if their (pixel) bounding boxes overlap
     Merges them if they do
@@ -183,19 +209,6 @@ def merge_overlapping_islands(islands: "list[UVFaceSet]") -> "list[UVFaceSet]":
         i += 1
 
     return islands
-
-
-def __create_vert_face_mapping(faces, uv_layer):
-    # create mesh database for all faces
-    face_to_verts = defaultdict(set)
-    vert_to_faces = defaultdict(set)
-    for f in faces:
-        for l in f.loops:
-            id_ = l[uv_layer].uv.to_tuple(5), l.vert.index
-            face_to_verts[f.index].add(id_)
-            vert_to_faces[id_].add(f.index)
-
-    return (face_to_verts, vert_to_faces)
 
 
 def get_connected_components(nodes, get_connections_for_node):

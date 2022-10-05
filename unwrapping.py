@@ -7,7 +7,7 @@ from bpy.props import EnumProperty, BoolProperty
 
 from mathutils import Vector
 
-from .islands import UVFaceSet, get_connected_components, get_island_info
+from .islands import UVIsland, get_connected_components, get_islands_from_obj
 
 
 from .common import (
@@ -110,10 +110,10 @@ class PIXPAINT_OT_unwrap_pixel_grid(bpy.types.Operator):
         target_density = context.scene.pixpaint_texel_density
 
         obj = bpy.context.view_layer.objects.active
-        bm = bmesh.from_edit_mesh(obj.data)
-        uv_layer = bm.loops.layers.uv.verify()
+        mesh = bmesh.from_edit_mesh(obj.data)
+        uv_layer = mesh.loops.layers.uv.verify()
 
-        all_target_faces = [face for face in bm.faces if face.select]
+        all_target_faces = [face for face in mesh.faces if face.select]
 
         for quad_group, connected_non_quads in zip(*find_quad_groups(all_target_faces)):
             print(
@@ -135,7 +135,7 @@ class PIXPAINT_OT_unwrap_pixel_grid(bpy.types.Operator):
             )
 
             try:
-                grid = Grid(bm, quad_group)
+                grid = Grid(mesh, quad_group)
             except GridBuildException as e:
                 self.report({"ERROR"}, str(e))
                 return {"CANCELLED"}
@@ -243,7 +243,7 @@ class PIXPAINT_OT_unwrap_basic(bpy.types.Operator):
         )
 
         # Center
-        face_set = UVFaceSet(selected_faces, uv_layer)
+        face_set = UVIsland(selected_faces, uv_layer)
         center = 0.5 * (face_set.max + face_set.min)
         offset = Vector((0.5, 0.5)) - center
         uvs_translate_rotate_scale(selected_faces, uv_layer, offset)

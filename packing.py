@@ -11,14 +11,16 @@ from .common import (
     RectInt,
     Vector2Int,
     any_pinned,
-    find_image,
+    find_all_textures,
+    find_texture,
+    uvs_pin,
     uvs_rotate_90_degrees,
     uvs_translate_rotate_scale,
 )
 from .islands import (
-    UVFaceSet,
-    get_island_info,
-    get_island_info_from_faces,
+    UVIsland,
+    get_islands_from_obj,
+    get_islands_for_faces,
     merge_overlapping_islands,
 )
 
@@ -89,7 +91,10 @@ def pack_rects(rect_sizes, initial_space_size=16):
 
 
 def find_free_space_for_island(
-    target_island: UVFaceSet, all_islands: "list[UVFaceSet]", texture_size: int
+    target_island: UVIsland, 
+    all_islands: "list[UVIsland]", 
+    texture_size: int,
+    prefer_current_position: bool
 ):
 
     candidate_positions = [Vector2Int(0, 0)]
@@ -108,8 +113,11 @@ def find_free_space_for_island(
 
     candidate_positions.sort(key=lambda p: (p.y, p.x))
 
-    # Try at the existing position first! No need to move islands if space is free
-    candidate_positions.insert(0, target_island.pixel_pos.min)
+    if prefer_current_position:
+        # Try at the existing position first! No need to move islands if space is free
+        candidate_positions.insert(0, target_island.pixel_pos.min)
+    else:
+        candidate_positions.append(target_island.pixel_pos.min)
 
     tex_min = Vector2Int(0, 0)
     tex_max = Vector2Int(texture_size, texture_size)
@@ -141,56 +149,73 @@ class PIXPAINT_OT_selected_island_to_free_space(bpy.types.Operator):
 
     modify_texture: bpy.props.BoolProperty(default=False)
     selection_is_island: bpy.props.BoolProperty(default=True)
+
+    # If True: only Islands with Pinned verts will count as occupied
+    # (unpinned islands are considered free space)
     ignore_unpinned_islands: bpy.props.BoolProperty(default=True)
+
+    # Should the Island stay in place if it's already in 'free space' 
+    # (or be moved to bottom left)
+    prefer_current_position: bpy.props.BoolProperty(default=False)
+
+    # Should OTHER objects' UV islands also be included (as occupied space) 
+    # if they use the same texture
+    include_other_objects: bpy.props.BoolProperty(default=True)
 
     def execute(self, context):
         obj = bpy.context.view_layer.objects.active
-        bm = bmesh.from_edit_mesh(obj.data)
-        uv_layer = bm.loops.layers.uv.verify()
+        mesh = bmesh.from_edit_mesh(obj.data)
+        uv_layer = mesh.loops.layers.uv.verify()
 
         texture_size = context.scene.pixpaint_texture_size
 
         # FIND ISLANDS
 
         if self.selection_is_island:
-            selected_faces = [face for face in bm.faces if face.select]
-            other_faces = [face for face in bm.faces if not face.select]
-            selected_islands = get_island_info_from_faces(bm, selected_faces, uv_layer)
-            all_islands = get_island_info_from_faces(bm, other_faces, uv_layer)
+            selected_faces = [face for face in mesh.faces if face.select]
+            other_faces = [face for face in mesh.faces if not face.select]
+            selected_islands = get_islands_for_faces(mesh, selected_faces, uv_layer)
+            all_islands = get_islands_for_faces(mesh, other_faces, uv_layer)
         else:
-            all_islands = get_island_info(obj, False)
+            all_islands = get_islands_from_obj(obj, False)
             selected_islands = [
-                isl for isl in all_islands if any(uvf.face.select for uvf in isl.faces)
+                isl for isl in all_islands if any(uvf.face.select for uvf in isl.uv_faces)
             ]
 
+        if self.include_other_objects:
+            obj_texture = find_texture(obj)
+            for other in context.view_layer.objects:
+                if other != obj: # Exclude myself
+                    if other.type == "MESH":
+                        other_textures = find_all_textures(other)
+                        if obj_texture in other_textures:
+                            all_islands.extend(get_islands_from_obj(other, False))
+
         if self.ignore_unpinned_islands:
-            all_islands = [isl for isl in all_islands if any_pinned((uvf.face for uvf in isl.faces), uv_layer)]
+            all_islands = [isl for isl in all_islands if isl.is_any_pinned()]
 
         modify_texture = self.modify_texture
 
         for island in selected_islands:
             island.calc_pixel_pos(texture_size)
-            # old_pos = island.pixel_pos.min
-            # h = island.pixel_pos.size.y / 2
-            # pivot = Vector((old_pos.x + h, old_pos.y + h)) / texture_size
-            # faces = (faceinfo.face for faceinfo in island.faces)
-            # uvs_rotate_90_degrees(faces, uv_layer, pivot)
 
             # continue
-            new_pos = find_free_space_for_island(island, all_islands, texture_size)
+            new_pos = find_free_space_for_island(island, all_islands, texture_size, self.prefer_current_position)
             old_pos = island.pixel_pos.min
 
             offset = (new_pos - old_pos) / texture_size
 
-            faces = (faceinfo.face for faceinfo in island.faces)
+            faces = (faceinfo.face for faceinfo in island.uv_faces)
             uvs_translate_rotate_scale(faces, uv_layer, translate=offset)
 
             if modify_texture:
-                texture = find_image(obj)
+                texture = find_texture(obj)
                 if texture:
                     copy_texture_region(
                         texture, old_pos, island.pixel_pos.size, new_pos
                     )
+
+            uvs_pin(island.get_faces(), uv_layer)
 
         bmesh.update_edit_mesh(obj.data)
 
@@ -211,14 +236,14 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
 
-        texture = find_image(obj)
+        texture = find_texture(obj)
         if texture is not None:
             texture_size = texture.size[0]
         else:
             texture_size: int = context.scene.pixpaint_texture_size
 
         # FIND ISLANDS
-        islands = get_island_info(obj, False)
+        islands = get_islands_from_obj(obj, False)
 
         for island in islands:
             island.calc_pixel_pos(texture_size)
@@ -259,7 +284,7 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
             print(f"ISLAND\n{old_pos=} {texture_size=} {new_pos=} {new_size=}\n")
             offset = (old_pos * (scale - 1)) / new_size + (new_pos / new_size) - (old_pos / texture_size)
 
-            faces = [faceinfo.face for faceinfo in island.faces]
+            faces = [faceinfo.face for faceinfo in island.uv_faces]
 
             # Should the rectangular UV island be flipped?
             # We do this in a way that preserves the bottom left point

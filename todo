@@ -47,13 +47,11 @@ TESTING REMARKS:
 
 CROCOJAM FINDINGS:
 
- - Need a way to pick colors quickly (from palette)
- - Need a way to set brush size quickly
- - "Selection to Free Space" is super unintuitive currently. It just doesn't seem to work? I'm not sure if 
+ - [ ] Need a way to pick colors quickly (from palette)
+ - [ ] Need a way to set brush size quickly
+ - [x] "Selection to Free Space" is super unintuitive currently. It just doesn't seem to work? I'm not sure if 
   it depends on pinned islands or ALL islands (for determining free space). If it's the latter, then
   the plugin might need a button to 'clear all UVs' (basically assigning them to somewhere outside the UV map)
   so that the whole texture becomes free space.
- - Definitely need a way to EITHER duplicate UV islands (from same geometry) OR deal with multiple objects
-  (to allow for linked meshes to be painted at the same time). For the latter, it'd have to be possible to
-  detect UV islands from OTHER models.
- - Triangles get stuck when using "FOLD X / FOLD Y"
+ - [x] Deal with multiple objects (to allow for linked meshes to be painted at the same time). 
+ - [ ] Triangles get stuck when using "FOLD X / FOLD Y"

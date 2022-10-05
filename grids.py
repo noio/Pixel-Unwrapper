@@ -227,8 +227,6 @@ class Grid:
 
         self.size = max_coord - min_coord + 1
 
-        print(str(self))
-
     def _walk(self, face, coord, incoming_edge, edge_dir: Direction):
         """
         Add the face to the grid, and walk the neighbors.
@@ -254,7 +252,7 @@ class Grid:
                 if not edge.seam:
                     for other_face in self.other_faces_on_edge(edge, face):
                         if other_face:
-                            print(f"f{other_face.index} {Direction(dir_idx)} of {face.index}")
+                            # print(f"f{other_face.index} {Direction(dir_idx)} of {face.index}")
                             # If we walk from the SOUTH edge, that's the NORTH edge
                             # of the face we're walking to. So use opposite()
                             self._walk(
@@ -294,17 +292,6 @@ class Grid:
         row_sizes = [mean(lengths) for lengths in row_sizes]
 
         return column_sizes, row_sizes
-
-    def __str__(self):
-        s = f"Grid of {self.size.x} by {self.size.y} faces:\n"
-        for y in range(self.size.y):
-            for x in range(self.size.x):
-                if any(f.coord.x == x and f.coord.y == y for f in self._faces.values()):
-                    s += "■"
-                else:
-                    s += "□"
-            s += "\n"
-        return s
 
     def straighten_uv(self, uv_layer, texture_size=None, target_density=None):
 
@@ -467,7 +454,7 @@ class Grid:
             ascii.box(x, y, cw + 1, ch + 1)
             ascii.text(x + 2, y + 1, f"{face.face.index:3}")
 
-        output = f"\n UNWRAP RESULT: {self.size.x} x {self.size.y} GRID\n\n{ascii}"
+        output = f"\n{self.size.x} x {self.size.y} GRID\n\n{ascii}"
 
         return output
 

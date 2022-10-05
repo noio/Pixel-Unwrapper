@@ -213,6 +213,7 @@ def uvs_pin(faces, uv_layer, pin=True):
         for loop_uv in face.loops:
             loop_uv[uv_layer].pin_uv = pin
 
+
 def any_pinned(faces, uv_layer):
     for face in faces:
         for loop_uv in face.loops:
@@ -227,63 +228,39 @@ def is_outer_edge_of_selection(edge):
     )
 
 
-def find_image(obj, face=None, tex_layer=None):
+def find_texture(obj, face=None, tex_layer=None):
     """From MagicUV"""
-    images = find_images(obj, face, tex_layer)
+    images = find_all_textures(obj, face, tex_layer)
     images = list(set(images))
 
     if len(images) >= 2:
-        raise RuntimeError("Find more than 2 images")
+        raise RuntimeError(f"{obj} uses two or more materials.")
     if not images:
         return None
 
     return images[0]
 
 
-def find_images(obj, face=None, tex_layer=None):
+def find_all_textures(obj, face=None, tex_layer=None):
     """From MagicUV"""
-    images = []
 
-    # try to find from texture_layer
+    # Try to find from texture_layer
     if tex_layer and face:
         if face[tex_layer].image is not None:
-            images.append(face[tex_layer].image)
+            # Return list with one element
+            return [face[tex_layer].image]
 
-    # not found, then try to search from node
-    if not images:
-        nodes = find_texture_nodes(obj)
-        for n in nodes:
-            images.append(n.image)
+    # Not found, search through Shader nodes:
+    images = []
+
+    for slot in obj.material_slots:
+        if slot.material:
+            for node in slot.material.node_tree.nodes:
+                if node.type in ["TEX_ENVIRONMENT", "TEX_IMAGE"]:
+                    if node.image:
+                        images.append(node.image)
 
     return images
-
-
-def find_texture_nodes(obj):
-    nodes = []
-    for slot in obj.material_slots:
-        if not slot.material:
-            continue
-        nodes.extend(find_texture_nodes_from_material(slot.material))
-
-    return nodes
-
-
-def find_texture_nodes_from_material(mtrl):
-    nodes = []
-    if not mtrl.node_tree:
-        return nodes
-    for node in mtrl.node_tree.nodes:
-        tex_node_types = [
-            "TEX_ENVIRONMENT",
-            "TEX_IMAGE",
-        ]
-        if node.type not in tex_node_types:
-            continue
-        if not node.image:
-            continue
-        nodes.append(node)
-
-    return nodes
 
 
 def dump(obj):
