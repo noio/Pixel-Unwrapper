@@ -33,6 +33,12 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
         row.operator("view3d.pixpaint_detect_texture_size", text="", icon="EYEDROPPER")
         row.prop(context.scene, "pixpaint_texture_size")
 
+        row = col.row(align=True)
+        op = row.operator("view3d.pixpaint_resize_texture", text ="Double (×2)")
+        op.scale = 2
+        op = row.operator("view3d.pixpaint_resize_texture", text ="Halve (÷2)")
+        op.scale = .5
+
         col.separator()
 
         row = col.row(align=True)

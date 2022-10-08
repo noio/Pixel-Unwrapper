@@ -1,6 +1,7 @@
+from cgitb import text
 from math import cos, sin, pi
 
-# import bpy
+import bpy
 import bmesh
 from mathutils import Vector
 
@@ -116,6 +117,83 @@ class PIXPAINT_OT_create_texture(bpy.types.Operator):
         image_node.location = location
 
         return {"FINISHED"}
+
+
+class PIXPAINT_OT_resize_texture(bpy.types.Operator):
+    """Resize Texture on Selected Object"""
+
+    bl_idname = "view3d.pixpaint_resize_texture"
+    bl_label = "Resize Texture"
+    bl_options = {"UNDO"}
+
+    scale: bpy.props.FloatProperty(default=2)
+    only_update_uvs_on_active: bpy.props.BoolProperty(default=False)
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.view_layer.objects.active
+        return obj is not None and find_texture(obj) is not None
+
+    def execute(self, context):
+        obj = context.view_layer.objects.active
+        texture = find_texture(obj)
+        texture_size = texture.size[0]
+        new_size = round(texture_size * self.scale)
+
+        if self.scale < 1 and texture.is_dirty:
+            self.report({"ERROR"}, f"Please save \"{texture.name}\" first because cropping cannot be undone.")
+            return {"CANCELLED"}
+
+        if new_size < 2:
+            self.report({"ERROR"}, "That's too small.")
+            return {"CANCELLED"}
+
+        if new_size > 8192:
+            self.report({"ERROR"}, f"New texture would be {new_size} pixels, that's probably too big.")
+            return {"CANCELLED"}
+
+        # SCALE UP THE TEXTURE AND PRESERVE THE DATA
+        # WHEN SCALING DOWN, TEXTURE IS CROPPED TO BOTTOM LEFT
+        src_pixels = PixelArray(blender_image=texture)
+        dst_pixels = PixelArray(size=new_size)
+
+        copy_region_size = Vector2Int(min(src_pixels.width, dst_pixels.width), min(src_pixels.height, dst_pixels.height))
+        dst_pixels.copy_region_from(src_pixels, Vector2Int(0,0), copy_region_size, Vector2Int(0,0))
+
+        texture.scale(new_size, new_size)
+        texture.pixels = dst_pixels.pixels
+        texture.update()
+
+        # UPDATE THE UVS TO SPAN THE SAME PIXELS
+        # FIND ALL OBJECTS THAT USE THE SAME TEXTURE: 
+        # (if option enabled, otherwise just do it on active object)
+        objs_to_update_uvs = [obj] if self.only_update_uvs_on_active else context.view_layer.objects
+
+        actual_scale_inv = texture_size / new_size
+
+        for obj_to_update in objs_to_update_uvs:
+            if obj_to_update.type == "MESH":
+                obj_textures = find_all_textures(obj_to_update)
+
+                if texture in obj_textures:
+                    if obj.data.is_editmode:
+                        mesh = bmesh.from_edit_mesh(obj.data)
+                    else:
+                        mesh = bmesh.new() 
+                        mesh.from_mesh(obj.data)
+                    
+                    uv_layer = mesh.loops.layers.uv.verify()
+
+                    uvs_scale(mesh.faces, uv_layer, actual_scale_inv)
+                    
+                    if obj.data.is_editmode:
+                        bmesh.update_edit_mesh(obj.data)
+        
+        context.scene.pixpaint_texture_size = new_size
+
+        return {"FINISHED"}
+
+
 
 
 class PIXPAINT_OT_swap_eraser(bpy.types.Operator):
@@ -268,10 +346,10 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
 
         # Try one size smaller (but only if the texture can be divided by 2) 
         # and only if we're allowed to modify the texture
-        try_size = texture_size // 2 if (self.modify_texture and texture_size % 2 == 0) else texture_size
-        new_positions, new_size = pack_rects(rects, try_size)
+        min_size = texture_size // 2 if (texture_size % 2 == 0) else texture_size
+        new_positions, needed_size = pack_rects(rects, min_size)
 
-        if new_size > try_size:
+        if needed_size > texture_size:
             self.report({"ERROR"}, "Texture is not big enough for UV islands. Repacking might lose data. Resize texture first.")
             return {"CANCELLED"}
 
@@ -279,16 +357,14 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
 
         if modify_texture:
             src_pixels = PixelArray(blender_image=texture)
-            dst_pixels = PixelArray(size=new_size)
-
-        scale = new_size / texture_size
+            dst_pixels = PixelArray(size=texture_size)
 
         for (new_pos, island, flip) in zip(new_positions, islands, need_flip):
             new_pos = Vector2Int(new_pos[0], new_pos[1])
             old_pos = island.pixel_pos.min
 
             # print(f"ISLAND\n{old_pos=} {texture_size=} {new_pos=} {new_size=}\n")
-            offset = (old_pos * (scale - 1)) / new_size + (new_pos / new_size) - (old_pos / texture_size)
+            offset = (new_pos - old_pos) / texture_size
 
             faces = [faceinfo.face for faceinfo in island.uv_faces]
 
@@ -303,21 +379,17 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
                 uvs_rotate_90_degrees(faces, uv_layer, pivot)
 
             uvs_translate_rotate_scale(
-                faces, uv_layer, scale=1 / scale, translate=offset
+                faces, uv_layer, translate=offset
             )
 
             if modify_texture:
-                dst_pixels.copy_region(
+                dst_pixels.copy_region_from(
                     src_pixels, old_pos, island.pixel_pos.size, new_pos, flip
                 )
 
         bmesh.update_edit_mesh(obj.data)
 
         if modify_texture:
-            if new_size != texture_size:
-                texture.scale(new_size, new_size)
-                # texture.generated_width = texture.generated_height = new_size
-                context.scene.pixpaint_texture_size = new_size
             texture.pixels = dst_pixels.pixels
             texture.update()
 

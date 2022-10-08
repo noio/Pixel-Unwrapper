@@ -6,7 +6,7 @@ from .common import Vector2Int
 def copy_texture_region(texture, src_pos, size, dst_pos):
     src_pixels = PixelArray(blender_image=texture)
     dst_pixels = PixelArray(blender_image=texture)
-    dst_pixels.copy_region(src_pixels, src_pos, size, dst_pos)
+    dst_pixels.copy_region_from(src_pixels, src_pos, size, dst_pos)
     texture.pixels = dst_pixels.pixels
     texture.update()
 
@@ -65,7 +65,7 @@ class PixelArray:
         self.pixels[idx + 2] = b
         self.pixels[idx + 3] = a
 
-    def copy_region(
+    def copy_region_from(
         self,
         source: "PixelArray",
         src_pos: Vector2Int,
@@ -80,6 +80,11 @@ class PixelArray:
         #     """
         # )
         original_pixels_len = len(self.pixels)
+
+        # DO SOME BOUNDS CHECKS CAUSE YOU KNOW
+        dst_max = dst_pos + size - 1
+        if dst_pos.x < 0 or dst_pos.y < 0 or dst_max.x >= source.width or dst_max.y > source.height:
+            raise Exception(f"Copy region is out of bounds for destination (min: {dst_pos} max {dst_max})")
 
         for y in range(size.y):
             for x in range(size.x):

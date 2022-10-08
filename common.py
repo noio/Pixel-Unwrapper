@@ -1,15 +1,10 @@
 import os, sys, unicodedata
 
-from math import atan2, fabs, sqrt, radians
-from collections import defaultdict
+from math import fabs, sqrt, radians
 
-from dataclasses import dataclass, field
-from typing import Any, Sequence
-from enum import Enum
+from dataclasses import dataclass
 
-import bpy
-import bmesh
-from bmesh.types import BMesh, BMFace, BMEdge
+from bmesh.types import BMFace, BMEdge
 
 from mathutils import Vector, Matrix
 
@@ -38,6 +33,8 @@ class Vector2Int:
         return Vector2Int(self.x + other.x, self.y + other.y)
 
     def __sub__(self, other):
+        if isinstance(other, int):
+            return Vector2Int(self.x - other, self.y - other)
         return Vector2Int(self.x - other.x, self.y - other.y)
 
     def __neg__(self):
