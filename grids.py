@@ -1,13 +1,10 @@
 from dataclasses import dataclass, field
 from itertools import accumulate
 from statistics import mean
-from tracemalloc import start
-from typing import Any, Iterator, Sequence
+from typing import Any, Sequence
 from enum import Enum
 from math import ceil
 
-import bpy
-import bmesh
 
 from mathutils import Vector, Matrix
 

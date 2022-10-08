@@ -11,9 +11,7 @@ def copy_texture_region(texture, src_pos, size, dst_pos):
     texture.update()
 
 
-class PixelArray:
-    PINK = [0.5, 0, 0.5, 1]
-    PINK_ALT = [0.5, 0.2, 0.5, 1]
+class PixelArray:    
 
     def __init__(self, blender_image=None, size: int = None):
         if blender_image is not None:
@@ -43,15 +41,11 @@ class PixelArray:
                     else:
                         col = [1, 0.6, 0, 1]  # YELLOW
 
-                if light:
-                    pixels.extend(col)
-                else:
-                    pixels.extend((c * 0.7 for c in col))
+                if not light:
+                    col = [c * 0.7 for c in col]
+                    col[3] = 1 # Fix alpha (we don't want to multiply that one with .7)
+                pixels.extend(col)
 
-            a = self.PINK + self.PINK_ALT
-            b = self.PINK_ALT + self.PINK
-            row_a = list(islice(cycle(a), size * 4))
-            row_b = list(islice(cycle(b), size * 4))
             self.pixels = pixels  # list(islice(cycle(row_a + row_b), size * size * 4))
 
     def get_pixel(self, pos: Vector2Int):

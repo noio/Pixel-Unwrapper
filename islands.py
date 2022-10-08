@@ -235,3 +235,56 @@ def get_connected_components(nodes, get_connections_for_node):
 
         connected_components.append(current_component)
     return connected_components
+
+
+
+
+def find_quad_groups(faces):
+    "Finds connected (contiguous) groups of quads"
+    quad_faces = []
+    non_quad_faces = []
+    for face in faces:
+        if len(face.edges) == 4:
+            quad_faces.append(face)
+        else:
+            non_quad_faces.append(face)
+
+    # Find contiguous groups of quads. Those can be made into grids
+    # The stray non-quad faces around it will have to be dealt with differently
+    quad_groups = get_connected_components(quad_faces, connected_faces)
+
+    if len(quad_groups) > 1:
+        connected_non_quads = find_closest_group(non_quad_faces, quad_groups)
+    else:
+        connected_non_quads = [non_quad_faces]
+
+    return (quad_groups, connected_non_quads)
+
+
+def connected_faces(face):
+    for edge in face.edges:
+        if not edge.seam:
+            for other_face in edge.link_faces:
+                if other_face != face:
+                    yield other_face
+
+
+def find_closest_group(faces, groups):
+    output = [list() for _ in range(len(groups))]
+    for face in faces:
+        print(f"==== Finding closest group for {face.index}")
+        closest_dist = float("inf")
+        closest = -1
+        for i, group in enumerate(groups):
+            for group_face in group:
+                dist = (
+                    face.calc_center_bounds() - group_face.calc_center_bounds()
+                ).length_squared
+                print(f"distance to {i}/{group_face.index} is {dist}")
+                if dist < closest_dist:
+                    closest_dist = dist
+                    closest = i
+
+        print(f"Closest distance was {closest_dist} for group {closest}")
+        output[closest].append(face)
+    return output

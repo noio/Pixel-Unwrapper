@@ -186,6 +186,16 @@ def uvs_translate_rotate_scale(
             transformed = (rotation @ uv) * scale + translate
             loop_uv[uv_layer].uv = transformed
 
+def uvs_scale(
+    faces,
+    uv_layer,
+    scale: Vector
+    ):
+    for face in faces:
+        for loop_uv in face.loops:
+            uv = loop_uv[uv_layer].uv
+            loop_uv[uv_layer].uv = scale * uv
+
 
 def uvs_snap_to_texel_corner(faces, uv_layer, texture_size, skip_pinned=False):
     for face in faces:
