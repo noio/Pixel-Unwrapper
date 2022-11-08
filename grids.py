@@ -16,6 +16,12 @@ from .common import (
     vert_between_edges,
 )
 
+GridSnapModes = [
+    ("ALL", "All Vertices", "", 1),
+    ("BOUNDS", "Bounds Only", "", 2),
+    ("NONE", "None", "", 3),
+]
+
 
 class Direction(Enum):
     EAST = 0
@@ -196,7 +202,9 @@ class Grid:
         # All selected faces should have been walked, otherwise it's a
         # non-contiguous selection
         if not all(gf is not None for gf in self._faces.values()):
-            unreached_faces = [index for (index, face) in self._faces.items() if face is None]
+            unreached_faces = [
+                index for (index, face) in self._faces.items() if face is None
+            ]
             raise GridBuildException(
                 f"Grid should contain a connected set of quad faces. Faces {unreached_faces} couldn't be reached from Face {startface.index}"
             )
@@ -290,17 +298,38 @@ class Grid:
 
         return column_sizes, row_sizes
 
-    def straighten_uv(self, uv_layer, texture_size=None, target_density=None):
+    def straighten_uv(
+        self, uv_layer, grid_snap_mode, texture_size=None, target_density=None
+    ):
 
         column_sizes, row_sizes = self.compute_row_column_sizes()
 
         # If target density is passed, make sure each row/column
         # consists of a round number of texture pixels
+        # Also make sure that each row/column gets AT LEAST one pixel
         if texture_size is not None and target_density is not None:
-            column_sizes = [
-                round(s * target_density) / texture_size for s in column_sizes
-            ]
-            row_sizes = [round(s * target_density) / texture_size for s in row_sizes]
+            if grid_snap_mode == "ALL":
+                column_sizes = [
+                    max(1, round(s * target_density)) / texture_size
+                    for s in column_sizes
+                ]
+                row_sizes = [
+                    max(1, round(s * target_density)) / texture_size for s in row_sizes
+                ]
+            else:
+                width = sum(column_sizes)
+                height = sum(row_sizes)
+                if grid_snap_mode == "BOUNDS":
+                    new_width = max(1, round(width * target_density)) / texture_size
+                    new_height = max(1, round(height * target_density)) / texture_size
+                else:
+                    # GRID SNAP MODE 'NONE'
+                    new_width = max(1, (width * target_density)) / texture_size
+                    new_height = max(1, (height * target_density)) / texture_size
+
+                column_sizes = [s * new_width / width for s in column_sizes]
+                row_sizes = [s * new_height / height for s in row_sizes]
+                print(f"w:{width} h{height} ROUNDED w:{new_width} h{new_height}")
 
         x_pos = [0] + list(accumulate(column_sizes))
         y_pos = [0] + list(accumulate(row_sizes))

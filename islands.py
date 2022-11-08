@@ -79,7 +79,7 @@ class UVIsland:
 
         self.average_uv /= self.num_uv
 
-    def calc_pixel_pos(self, texture_size, min_padding=0.02):
+    def calc_pixel_pos(self, texture_size, min_padding=0.3):
         if self.pixel_pos is None:
             """
             Add integer pixel positions to this UV island,
@@ -149,7 +149,8 @@ def get_islands_for_faces(mesh: "BMesh", faces, uv_layer) -> "list[UVIsland]":
     # Build two lookups for
     # all verts that makes up a face
     # all faces using a vert
-    # Lookups are by INDEX
+    # Lookups are by INDEX'
+    mesh.faces.ensure_lookup_table()
     face_to_verts = defaultdict(set)
     vert_to_faces = defaultdict(set)
     for f in faces:

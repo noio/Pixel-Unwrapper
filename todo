@@ -62,3 +62,10 @@ TESTING #3
  - [x] When doing "Unwrap Grid" with multiple unconnected islands, should just work for each island separately
  - [ ] Some buttons to up/downsize texture (and never do it automatically?)
  - [ ] Repacking without 'modify texture' fucks everything up if a different size is required. Needs a dialog (and item above)
+
+MORE BUGS
+ - [x] Single pixels SHOULD be more than a pixel sized because bleed will spread over neighbors otherwise
+ - [x] Move to free space on single pixel mapped islands doesnt work (it splits up the islands?!)
+ - [ ] Tool to "Snap Bounds to Pixels" (basically what Unwrap Rect does)
+
+ - [ ] Set Blend Mode of newly generated material to Alpha Clip

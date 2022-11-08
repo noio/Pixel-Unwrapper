@@ -10,7 +10,7 @@ from .common import *
 from .texture import PixelArray, copy_texture_region
 from .packing import find_free_space_for_island, pack_rects
 from .islands import *
-from .grids import Grid, GridBuildException
+from .grids import Grid, GridBuildException, GridSnapModes
 
 
 
@@ -262,6 +262,8 @@ class PIXPAINT_OT_selected_island_to_free_space(bpy.types.Operator):
                 isl for isl in all_islands if any(uvf.face.select for uvf in isl.uv_faces)
             ]
 
+        selected_islands = merge_overlapping_islands(selected_islands)
+
         if self.include_other_objects:
             obj_texture = find_texture(obj)
             for other in context.view_layer.objects:
@@ -427,10 +429,12 @@ class PIXPAINT_OT_unwrap_pixel_grid(bpy.types.Operator):
 
     bl_idname = "view3d.pixpaint_unwrap_pixel_grid"
     bl_label = "Unwrap Grid"
-    bl_options = {"UNDO"}
+    bl_options = {"REGISTER","UNDO"}
+
+
+    snap: bpy.props.EnumProperty(name="Snap Vertices", items=GridSnapModes)
 
     def execute(self, context):
-
         # bpy.ops.uv.select_split()
 
         texture_size = context.scene.pixpaint_texture_size
@@ -467,7 +471,7 @@ class PIXPAINT_OT_unwrap_pixel_grid(bpy.types.Operator):
                 self.report({"ERROR"}, str(e))
                 return {"CANCELLED"}
 
-            grid.straighten_uv(uv_layer, texture_size, target_density)
+            grid.straighten_uv(uv_layer, self.snap, texture_size, target_density)
 
             # Attach the non-quad faces to the quad grid:
             uvs_pin(quad_group, uv_layer)
@@ -497,6 +501,7 @@ class PIXPAINT_OT_unwrap_pixel_grid(bpy.types.Operator):
         bmesh.update_edit_mesh(obj.data)
 
         return {"FINISHED"}
+
 
 
 class PIXPAINT_OT_unwrap_extend(bpy.types.Operator):
@@ -629,7 +634,11 @@ class PIXPAINT_OT_unwrap_single_pixel(bpy.types.Operator):
 
         def vert_pos(v, v_total):
             a = pi * 2 * v / v_total
-            return Vector((0.45 * cos(a) + 0.5, 0.45 * sin(a) + 0.5))
+            # radius is slightly bigger than a pixel to make sure that they take
+            # up more than a pixel, and have some margin for bleed from other islands..
+            # I think.
+            radius = 0.49
+            return Vector((radius * cos(a) + 0.5, radius * sin(a) + 0.5))
 
         for face in selected_faces:
             v_count = len(face.loops)
