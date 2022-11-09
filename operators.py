@@ -7,7 +7,7 @@ from mathutils import Vector
 
 
 from .common import *
-from .texture import PixelArray, copy_texture_region
+from .texture import PixelArray, copy_texture_region, copy_transform_texture_region
 from .packing import find_free_space_for_island, pack_rects
 from .islands import *
 from .grids import Grid, GridBuildException, GridSnapModes
@@ -157,8 +157,8 @@ class PIXPAINT_OT_resize_texture(bpy.types.Operator):
         src_pixels = PixelArray(blender_image=texture)
         dst_pixels = PixelArray(size=new_size)
 
-        copy_region_size = Vector2Int(min(src_pixels.width, dst_pixels.width), min(src_pixels.height, dst_pixels.height))
-        dst_pixels.copy_region_from(src_pixels, Vector2Int(0,0), copy_region_size, Vector2Int(0,0))
+        copy_region_size = Vector2Int( dst_pixels.width,  dst_pixels.height)
+        dst_pixels.copy_region(src_pixels, Vector2Int(0,0), copy_region_size, Vector2Int(0,0))
 
         texture.scale(new_size, new_size)
         texture.pixels = dst_pixels.pixels
@@ -279,22 +279,22 @@ class PIXPAINT_OT_selected_island_to_free_space(bpy.types.Operator):
         modify_texture = self.modify_texture
 
         for island in selected_islands:
-            island.calc_pixel_pos(texture_size)
+            island.calc_pixel_bounds(texture_size)
 
             # continue
             new_pos = find_free_space_for_island(island, all_islands, texture_size, self.prefer_current_position)
-            old_pos = island.pixel_pos.min
+            old_pos = island.pixel_bounds.min
 
             offset = (new_pos - old_pos) / texture_size
 
-            faces = (faceinfo.face for faceinfo in island.uv_faces)
+            faces = island.get_faces()
             uvs_translate_rotate_scale(faces, uv_layer, translate=offset)
 
             if modify_texture:
                 texture = find_texture(obj)
                 if texture:
                     copy_texture_region(
-                        texture, old_pos, island.pixel_pos.size, new_pos
+                        texture, old_pos, island.pixel_bounds.size, new_pos
                     )
 
             uvs_pin(island.get_faces(), uv_layer)
@@ -328,17 +328,18 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
         islands = get_islands_from_obj(obj, False)
 
         for island in islands:
-            island.calc_pixel_pos(texture_size)
+            island.calc_pixel_bounds(texture_size)
 
         islands = merge_overlapping_islands(islands)
 
         rects = []
         need_flip = []
         for uv_island in islands:
-            rect_size = uv_island.pixel_pos.size
+            rect_size = uv_island.pixel_bounds.size
 
+            locked = uv_island.is_any_orientation_locked()
             # Flip all rectangles to lay flat (wider than they are high)
-            if rect_size.y > rect_size.x:
+            if not locked and rect_size.y > rect_size.x:
                 rect_size = Vector2Int(rect_size.y, rect_size.x)
                 need_flip.append(True)
             else:
@@ -363,7 +364,7 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
 
         for (new_pos, island, flip) in zip(new_positions, islands, need_flip):
             new_pos = Vector2Int(new_pos[0], new_pos[1])
-            old_pos = island.pixel_pos.min
+            old_pos = island.pixel_bounds.min
 
             # print(f"ISLAND\n{old_pos=} {texture_size=} {new_pos=} {new_size=}\n")
             offset = (new_pos - old_pos) / texture_size
@@ -376,7 +377,7 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
             # regardless of whether the island was flipped
             # H is a point halfway the left side of the rect, which.. well draw it out yourself
             if flip:
-                h = island.pixel_pos.size.y / 2
+                h = island.pixel_bounds.size.y / 2
                 pivot = Vector((old_pos.x + h, old_pos.y + h)) / texture_size
                 uvs_rotate_90_degrees(faces, uv_layer, pivot)
 
@@ -386,7 +387,7 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
 
             if modify_texture:
                 dst_pixels.copy_region_from(
-                    src_pixels, old_pos, island.pixel_pos.size, new_pos, flip
+                    src_pixels, old_pos, island.pixel_bounds.size, new_pos, flip
                 )
 
         bmesh.update_edit_mesh(obj.data)
@@ -660,28 +661,158 @@ class PIXPAINT_OT_uv_grid_fold(bpy.types.Operator):
 
     bl_idname = "view3d.pixpaint_uv_grid_fold"
     bl_label = "Fold UV Grid"
-    bl_options = {"UNDO"}
+    bl_options = {"REGISTER","UNDO"}
 
-    x_sections: bpy.props.IntProperty(default=2)
-    y_sections: bpy.props.IntProperty(default=1)
-    alternate: bpy.props.BoolProperty(default=True)
+    x_sections: bpy.props.IntProperty(default=2, name="X Sections")
+    y_sections: bpy.props.IntProperty(default=1, name="Y Sections")
+    alternate: bpy.props.BoolProperty(default=True, name="Alternate Direction")
 
     def execute(self, context):
+        obj = context.view_layer.objects.active
+        mesh = bmesh.from_edit_mesh(obj.data)
+        uv_layer = mesh.loops.layers.uv.verify()
 
-        obj = bpy.context.view_layer.objects.active
-        bm = bmesh.from_edit_mesh(obj.data)
-        uv_layer = bm.loops.layers.uv.verify()
-
-        all_target_faces = [face for face in bm.faces if face.select]
+        all_target_faces = [face for face in mesh.faces if face.select]
 
         for quad_group, _ in zip(*find_quad_groups(all_target_faces)):
             try:
-                grid = Grid(bm, quad_group)
+                grid = Grid(mesh, quad_group)
                 grid.realign_to_uv_map(uv_layer)
                 grid.fold(uv_layer, self.x_sections, self.y_sections, self.alternate)
             except GridBuildException as e:
                 self.report({"ERROR"}, str(e))
                 return {"CANCELLED"}
+
+        bmesh.update_edit_mesh(obj.data)
+        return {"FINISHED"}
+
+class PIXPAINT_OT_uv_flip(bpy.types.Operator):
+    """Flip the selected UV Island"""
+
+    bl_idname = "view3d.pixpaint_uv_flip"
+    bl_label = "Flip UV Island"
+    bl_options = {"UNDO"}
+
+    FlipAxis = [
+        ("X", "Flip X", "", 1),
+        ("Y", "Flip Y", "", 2),
+    ]
+
+    flip_axis: bpy.props.EnumProperty(items=FlipAxis, name="Flip Axis")
+    modify_texture: bpy.props.BoolProperty(default=False, name="Modify Texture")
+
+    def execute(self, context):
+        obj = context.view_layer.objects.active
+        mesh = bmesh.from_edit_mesh(obj.data)
+        uv_layer = mesh.loops.layers.uv.verify()
+
+        texture_size = context.scene.pixpaint_texture_size
+
+        # FIND ISLANDS
+        islands = get_islands_from_obj(obj, True)
+
+        texture = find_texture(obj)
+
+        for island in islands:
+
+            island.calc_pixel_bounds(texture_size)
+            island_rect = island.pixel_bounds
+
+            if self.flip_axis == "X":
+                matrix = Matrix.Diagonal((-1,1,1))
+                pivot = (island_rect.min + island_rect.max) / 2
+            elif self.flip_axis == "Y":
+                matrix = Matrix.Diagonal((1,-1,1))
+                pivot = (island_rect.min + island_rect.max) / 2
+
+            pivot = pivot.to_3d()
+            pivot.z = 1 # Make Homogeneous Vector
+            transformed_pivot = matrix @ pivot
+            offset_tex = pivot - transformed_pivot
+            
+            matrix[0][2] = offset_tex[0]
+            matrix[1][2] = offset_tex[1]
+            
+            offset_uv = offset_tex / texture_size
+            matrix_uv = matrix.copy()
+            matrix_uv[0][2] = offset_uv[0]
+            matrix_uv[1][2] = offset_uv[1]
+            
+            uvs_transform(island.get_faces(), uv_layer, matrix_uv)
+
+            if (self.modify_texture):
+                copy_transform_texture_region(texture, island_rect, matrix)
+
+
+class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
+    """Rotate the selected UV Island by 90 degrees (CCW)"""
+
+    bl_idname = "view3d.pixpaint_uv_rot_90"
+    bl_label = "Rotate UV Island 90 Degrees"
+    bl_options = {"UNDO"}
+
+    modify_texture: bpy.props.BoolProperty(default=False, name="Modify Texture")
+
+    def execute(self, context):
+
+        bpy.ops.ed.undo_push()
+        obj = context.view_layer.objects.active
+        mesh = bmesh.from_edit_mesh(obj.data)
+        uv_layer = mesh.loops.layers.uv.verify()
+
+        texture_size = context.scene.pixpaint_texture_size
+        texture_rect = RectInt(Vector2Int(0,0), Vector2Int(texture_size, texture_size))
+
+        # FIND ISLANDS
+        islands = get_islands_from_obj(obj, True)
+
+        texture = find_texture(obj)
+
+        for island in islands:
+
+            island.calc_pixel_bounds(texture_size)
+            island_rect = island.pixel_bounds
+            
+            matrix = Matrix.Rotation(radians(90),2).to_3x3()
+            h = island.pixel_bounds.size.y / 2
+            pivot = Vector((island_rect.min.x + h, island_rect.min.y + h))
+
+            pivot = pivot.to_3d()
+            pivot.z = 1 # Make Homogeneous Vector
+            transformed_pivot = matrix @ pivot
+            offset_tex = pivot - transformed_pivot
+            
+            matrix[0][2] = offset_tex[0]
+            matrix[1][2] = offset_tex[1]
+            
+            offset_uv = offset_tex / texture_size
+            matrix_uv = matrix.copy()
+            matrix_uv[0][2] = offset_uv[0]
+            matrix_uv[1][2] = offset_uv[1]
+
+            uvs_transform(island.get_faces(), uv_layer, matrix_uv)
+
+            if (self.modify_texture):
+                # When rotating, the bounds change, so we need to find some 
+                # FREE SPACE on the texture to move the island to.
+                # Otherwise, when flipping X / Y we can just do that in-place
+                old_pos = island.pixel_bounds.min
+                bpy.ops.view3d.pixpaint_selected_island_to_free_space(modify_texture=False)
+                island.calc_info()
+                island.calc_pixel_bounds(texture_size)
+                if not texture_rect.contains(island.pixel_bounds.min, island.pixel_bounds.size):
+                    self.report({"ERROR"}, f"Not enough free space on texture to rotate island. Increase texture size or turn off 'Modify Texture'")
+                    bpy.ops.ed.undo()
+                    return {"CANCELLED"}
+                new_pos = island.pixel_bounds.min
+                move = new_pos - old_pos
+                matrix[0][2] += move.x
+                matrix[1][2] += move.y
+                
+                copy_transform_texture_region(texture, island_rect, matrix)
+
+        # THIS INVALIDATES ALL FACE DATA, SO DO IT OUTSIDE OF MAIN LOOP
+        lock_orientation(mesh, [face for face in mesh.faces if face.select], True)
 
         bmesh.update_edit_mesh(obj.data)
         return {"FINISHED"}

@@ -1,12 +1,22 @@
 from itertools import cycle, islice
+from math import ceil, floor
+from mathutils import Vector, Matrix
 
-from .common import Vector2Int
+from .common import RectInt, Vector2Int
+
 
 
 def copy_texture_region(texture, src_pos, size, dst_pos):
     src_pixels = PixelArray(blender_image=texture)
     dst_pixels = PixelArray(blender_image=texture)
     dst_pixels.copy_region_from(src_pixels, src_pos, size, dst_pos)
+    texture.pixels = dst_pixels.pixels
+    texture.update()
+
+def copy_transform_texture_region(texture, region:RectInt, transform:Matrix):
+    src_pixels = PixelArray(blender_image=texture)
+    dst_pixels = PixelArray(blender_image=texture)
+    dst_pixels.copy_region_transformed(src_pixels, region, transform)
     texture.pixels = dst_pixels.pixels
     texture.update()
 
@@ -48,92 +58,99 @@ class PixelArray:
 
             self.pixels = pixels  # list(islice(cycle(row_a + row_b), size * size * 4))
 
-    def get_pixel(self, pos: Vector2Int):
+    def get_pixel(self, x, y):
         # MODE = WRAP
-        x = pos.x % self.width
-        y = pos.y % self.height
+        x = x % self.width
+        y = y % self.height
         idx = (y * self.width + x) * 4
         # RETURN R G B A
         return tuple(self.pixels[idx : idx + 4])
 
-    def set_pixel(self, pos: Vector2Int, r, g, b, a):
-        x = pos.x % self.width
-        y = pos.y % self.height
+    def set_pixel(self, x, y, pix):
+        x = x % self.width
+        y = y % self.height
         idx = (y * self.width + x) * 4
-        self.pixels[idx] = r
-        self.pixels[idx + 1] = g
-        self.pixels[idx + 2] = b
-        self.pixels[idx + 3] = a
+        assert(len(pix) == 4)
+        self.pixels[idx:idx+4] = pix
 
-    def copy_region_from(
+    def copy_region(
         self,
         source: "PixelArray",
         src_pos: Vector2Int,
         size: Vector2Int,
         dst_pos: Vector2Int,
-        rotate_90_degrees=False,
     ):
-        # print(
-        #     f"""
-        #     COPY REGION {src_x, src_y, region_width, region_height} from {source_image.width}x{source_image.height} img
-        #     to {dst_x, dst_y} in {self.width}x{self.height} img
-        #     """
-        # )
+        matrix = Matrix.Identity(3)
+        offset = dst_pos - src_pos
+        src_rect = RectInt(src_pos, src_pos + size)
+        print(f"{src_rect=}")
+        matrix[0][2]=offset.x
+        matrix[1][2]=offset.y
+        self.copy_region_transformed(source, src_rect, matrix)
+
+
+    def copy_region_transformed(
+        self,
+        source: "PixelArray",
+        src_rect: RectInt,
+        transform: "Matrix",
+    ):
         original_pixels_len = len(self.pixels)
 
-        # DO SOME BOUNDS CHECKS CAUSE YOU KNOW
-        dst_max = dst_pos + size - 1
-        if dst_pos.x < 0 or dst_pos.y < 0 or dst_max.x >= source.width or dst_max.y > source.height:
-            raise Exception(f"Copy region is out of bounds for destination (min: {dst_pos} max {dst_max})")
+        # Determine bounds of the destination area
+        # Add a half because we really only want to copy from the centers
+        # pixels, not all the way to the bounds of the area.
+        half = Vector((.5, .5, 0))
+        bl = Vector(src_rect.min).to_3d() + half
+        bl.z = 1
+        tr = Vector(src_rect.max).to_3d() - half
+        tr.z = 1
+        tl = Vector(((bl.x, tr.y))).to_3d()
+        tl.z = 1
+        br = Vector(((tr.x, bl.y))).to_3d()
+        br.z = 1
+        
+        # Transform source corners to dest. corners
+        bl = transform @ bl
+        tr = transform @ tr
+        tl = transform @ tl
+        br = transform @ br
 
-        for y in range(size.y):
-            for x in range(size.x):
-                read_pos = src_pos.offset(x, y)
-                if rotate_90_degrees:
-                    write_pos = dst_pos.offset(size.y - 1 - y, x)
-                else:
-                    write_pos = dst_pos.offset(x, y)
-                self.set_pixel(write_pos, *source.get_pixel(read_pos))
+        # Find the destination bounds, and also clamp it to be within image size
+        # This means we're not wrap-around-writing, out-of-bounds destination pixels
+        # is just ignored.
+        dst_min_x = max(0,floor(min(bl.x, br.x, tl.x, tr.x)))
+        dst_min_y = max(0,floor(min(bl.y, br.y, tl.y, tr.y)))
+        dst_max_x = min(self.width, ceil(max(bl.x, br.x, tl.x, tr.x)))
+        dst_max_y = min(self.height, ceil(max(bl.y, br.y, tl.y, tr.y)))
 
-        # # Crop the region to the maximum viable area
-        # out_of_bounds_x = min(0, src_x, dst_x)
-        # out_of_bounds_y = min(0, src_y, dst_y)
-        # src_x -= out_of_bounds_x
-        # src_y -= out_of_bounds_y
-        # dst_x -= out_of_bounds_x
-        # dst_y -= out_of_bounds_y
-        # region_width += out_of_bounds_x
-        # region_height += out_of_bounds_y
+        print(f"X: {dst_min_x}-{dst_max_x} Y: {dst_min_y}-{dst_max_y}")
 
-        # out_of_bounds_x = max(
-        #     0,
-        #     src_x + region_width - source.width,
-        #     dst_x + region_width - self.width,
-        # )
-        # out_of_bounds_y = max(
-        #     0,
-        #     src_y + region_height - source.height,
-        #     dst_y + region_height - self.height,
-        # )
+        # We need the inverse transform, cause we want to check
+        # for each point in the dest-bounds if it falls within the
+        # src-bounds (so we inverse transform it)
+        inv_transform = transform.inverted()
 
-        # region_width -= out_of_bounds_x
-        # region_height -= out_of_bounds_y
+        for y in range(dst_min_y, dst_max_y):
+            for x in range(dst_min_x, dst_max_x):
+                src_point = inv_transform @ Vector((x+.5, y+.5, 1))
+                # Nearest neighbor interpolation: 
+                pix = source.get_pixel(floor(src_point.x), floor(src_point.y))
+                self.set_pixel(x, y, pix)
 
-        # for y in range(region_height):
-        #     src_line_y = y + src_y
-        #     src_idx_start = (src_line_y * source.width + src_x) * 4
-        #     src_idx_end = (src_line_y * source.width + src_x + region_width) * 4
-        #     dst_line_y = y + dst_y
-        #     dst_idx_start = (dst_line_y * self.width + dst_x) * 4
-        #     dst_idx_end = (dst_line_y * self.width + dst_x + region_width) * 4
+        # # DO SOME BOUNDS CHECKS CAUSE YOU KNOW
+        # dst_max = dst_pos + size - 1
+        # if dst_pos.x < 0 or dst_pos.y < 0 or dst_max.x >= source.width or dst_max.y > source.height:
+        #     raise Exception(f"Copy region is out of bounds for destination (min: {dst_pos} max {dst_max})")
 
-        #     # print(
-        #     #     f"COPY LINE: {src_x, src_line_y} to {dst_x, dst_line_y} W: {region_width} IDX: {src_idx_start, src_idx_end} to {dst_idx_start, dst_idx_end}"
-        #     # )
-        #     assert dst_idx_end - dst_idx_start == src_idx_end - src_idx_start
-
-        #     srcpix = source.pixels[src_idx_start:src_idx_end]
-        #     self.pixels[dst_idx_start:dst_idx_end] = srcpix
+        # for y in range(size.y):
+        #     for x in range(size.x):
+        #         read_pos = src_pos.offset(x, y)
+        #         if rotate_90_degrees:
+        #             write_pos = dst_pos.offset(size.y - 1 - y, x)
+        #         else:
+        #             write_pos = dst_pos.offset(x, y)
+        #         self.set_pixel(write_pos, *source.get_pixel(read_pos))
 
         assert (
             len(self.pixels) == original_pixels_len

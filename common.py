@@ -173,15 +173,34 @@ def uvs_translate_rotate_scale(
 ):
     """
     Translate, rotate, and scale all UVs in the given faces
+    Translation is performed LAST
 
     rotation is in RADIANS
     """
-    rotation = Matrix.Rotation(rotate, 2)
+    matrix = (Matrix.Rotation(rotate, 2) * scale).to_3x3()
+    matrix[0][2] = translate.x
+    matrix[1][2] = translate.y
+    uvs_transform(faces, uv_layer, matrix)
+
+
+def uvs_transform(
+    faces,
+    uv_layer,
+    transformation=Matrix
+):
+    """
+    Translate, rotate, and scale all UVs in the given faces
+
+    rotation is in RADIANS
+    """
     for face in faces:
         for loop_uv in face.loops:
             uv = loop_uv[uv_layer].uv
-            transformed = (rotation @ uv) * scale + translate
-            loop_uv[uv_layer].uv = transformed
+            uv = uv.to_3d()
+            uv.z = 1
+            transformed = (transformation @ uv)
+            transformed /= transformed.z
+            loop_uv[uv_layer].uv = transformed.xy
 
 def uvs_scale(
     faces,
@@ -228,6 +247,12 @@ def any_pinned(faces, uv_layer):
                 return True
     return False
 
+def lock_orientation(mesh, faces, is_locked):
+    lock_layer = mesh.faces.layers.int.get('orientation_locked')
+    # THIS IS BAD BECAUSE IT LOCKS ALL FACES IN WHOLE MESH NOT JUST IN ISLAND
+    for face in faces:
+        face[lock_layer] = 1 if is_locked else 0
+    # print([face[lock_layer] for face in self.mesh.faces])
 
 def is_outer_edge_of_selection(edge):
     return (

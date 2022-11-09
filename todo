@@ -60,8 +60,8 @@ CROCOJAM FINDINGS:
 TESTING #3
  - [x] Need a real Rect unwrap (scale only outer coords, don't snap every single UV vert)
  - [x] When doing "Unwrap Grid" with multiple unconnected islands, should just work for each island separately
- - [ ] Some buttons to up/downsize texture (and never do it automatically?)
- - [ ] Repacking without 'modify texture' fucks everything up if a different size is required. Needs a dialog (and item above)
+ - [x] Some buttons to up/downsize texture (and never do it automatically?)
+ - [x] Repacking without 'modify texture' fucks everything up if a different size is required. Needs a dialog (and item above)
 
 MORE BUGS
  - [x] Single pixels SHOULD be more than a pixel sized because bleed will spread over neighbors otherwise

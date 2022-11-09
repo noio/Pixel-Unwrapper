@@ -20,7 +20,6 @@ class UVFace:
     def __init__(self, face: BMFace, uv_layer):
         self.face = face
         self.uv_layer = uv_layer
-        self.calc_info()
 
     def calc_info(self):
 
@@ -51,7 +50,7 @@ class UVIsland:
     max: Vector
     min: Vector
     average_uv: Vector
-    pixel_pos: RectInt = None
+    pixel_bounds: RectInt = None
     uv_layer: any
 
     def __init__(self, bmfaces: "list[BMFace]", mesh: "BMesh", uv_layer):
@@ -66,6 +65,8 @@ class UVIsland:
         self.average_uv = Vector((0.0, 0.0))
         self.num_uv = 0
         for face in self.uv_faces:
+            
+            face.calc_info()
 
             self.average_uv += sum(
                 (l[self.uv_layer].uv for l in face.face.loops), Vector((0, 0))
@@ -79,23 +80,22 @@ class UVIsland:
 
         self.average_uv /= self.num_uv
 
-    def calc_pixel_pos(self, texture_size, min_padding=0.3):
-        if self.pixel_pos is None:
-            """
-            Add integer pixel positions to this UV island,
-            depending on the passed-in texture size.
-            Useful when manipulating the texture based on islands,
-            or when finding free space
-            """
-            xmin = floor(self.min.x * texture_size - min_padding)
-            ymin = floor(self.min.y * texture_size - min_padding)
-            xmax = ceil(self.max.x * texture_size + min_padding)
-            ymax = ceil(self.max.y * texture_size + min_padding)
+    def calc_pixel_bounds(self, texture_size, min_padding=0.3):
+        """
+        Add integer pixel positions to this UV island,
+        depending on the passed-in texture size.
+        Useful when manipulating the texture based on islands,
+        or when finding free space
+        """
+        xmin = floor(self.min.x * texture_size - min_padding)
+        ymin = floor(self.min.y * texture_size - min_padding)
+        xmax = ceil(self.max.x * texture_size + min_padding)
+        ymax = ceil(self.max.y * texture_size + min_padding)
 
-            mi = Vector2Int(xmin, ymin)
-            ma = Vector2Int(xmax, ymax)
+        mi = Vector2Int(xmin, ymin)
+        ma = Vector2Int(xmax, ymax)
 
-            self.pixel_pos = RectInt(mi, ma)
+        self.pixel_bounds = RectInt(mi, ma)
 
     def merge(self, other: "UVIsland"):
         self.max = elem_max(self.max, other.max)
@@ -109,14 +109,25 @@ class UVIsland:
         self.uv_faces.extend(other.uv_faces)
         self.num_uv += other.num_uv
 
-        if self.pixel_pos is not None and other.pixel_pos is not None:
-            self.pixel_pos.encapsulate(other.pixel_pos)
+        if self.pixel_bounds is not None and other.pixel_bounds is not None:
+            self.pixel_bounds.encapsulate(other.pixel_bounds)
 
     def get_faces(self):
         return (uv_face.face for uv_face in self.uv_faces)
 
     def is_any_pinned(self):
         return any_pinned(self.get_faces(), self.mesh.loops.layers.uv.verify())
+
+
+    def is_any_orientation_locked(self):
+        # try:
+        lock_layer = self.mesh.faces.layers.int.get('orientation_locked')
+        # print(f"{lock_layer=}")
+        # except AttributeError:
+        #     #if the layer doesn't exist, no faces are locked
+        #     return False
+        # print([face[lock_layer] for face in self.get_faces()])
+        return any(face[lock_layer] == 1 for face in self.get_faces())
 
 
 def get_islands_from_obj(obj, only_selected=True) -> "list[UVIsland]":

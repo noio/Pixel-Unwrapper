@@ -105,6 +105,18 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
         fold_y.y_sections = context.scene.pixpaint_fold_sections
         fold_y.alternate = context.scene.pixpaint_fold_alternate
 
+        row = box.row(align=True)
+        op = row.operator("view3d.pixpaint_uv_flip", text ="Flip X")
+        op.flip_axis = "X"
+        op.modify_texture = context.scene.pixpaint_modify_texture
+
+        op = row.operator("view3d.pixpaint_uv_flip", text ="Flip Y")
+        op.flip_axis = "Y"
+        op.modify_texture = context.scene.pixpaint_modify_texture
+
+        op = row.operator("view3d.pixpaint_uv_rot_90", text ="Rot 90")
+        op.modify_texture = context.scene.pixpaint_modify_texture
+
         col = box.column(align=True)
         op = col.operator(
             "view3d.pixpaint_selected_island_to_free_space", icon="UV_ISLANDSEL"
@@ -113,6 +125,8 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
 
         op = col.operator("view3d.pixpaint_repack_uvs", icon="ALIGN_BOTTOM")
         op.modify_texture = context.scene.pixpaint_modify_texture
+
+        
 
 
 class PIXPAINT_PT_paint_tools(bpy.types.Panel):
