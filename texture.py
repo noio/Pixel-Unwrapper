@@ -9,7 +9,7 @@ from .common import RectInt, Vector2Int
 def copy_texture_region(texture, src_pos, size, dst_pos):
     src_pixels = PixelArray(blender_image=texture)
     dst_pixels = PixelArray(blender_image=texture)
-    dst_pixels.copy_region_from(src_pixels, src_pos, size, dst_pos)
+    dst_pixels.copy_region(src_pixels, src_pos, size, dst_pos)
     texture.pixels = dst_pixels.pixels
     texture.update()
 

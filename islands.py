@@ -122,6 +122,8 @@ class UVIsland:
     def is_any_orientation_locked(self):
         # try:
         lock_layer = self.mesh.faces.layers.int.get('orientation_locked')
+        if lock_layer is None:
+            return False
         # print(f"{lock_layer=}")
         # except AttributeError:
         #     #if the layer doesn't exist, no faces are locked
