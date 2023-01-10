@@ -247,10 +247,14 @@ def any_pinned(faces, uv_layer):
                 return True
     return False
 
-def lock_orientation(mesh, faces, is_locked):
+def lock_orientation(mesh, face_indices, is_locked):
     lock_layer = mesh.faces.layers.int.get('orientation_locked')
+    if (lock_layer is None):
+        lock_layer = mesh.faces.layers.int.new('orientation_locked')
+        
     # THIS IS BAD BECAUSE IT LOCKS ALL FACES IN WHOLE MESH NOT JUST IN ISLAND
-    for face in faces:
+    for face_index in face_indices:
+        face = mesh.faces[face_index]
         face[lock_layer] = 1 if is_locked else 0
     # print([face[lock_layer] for face in self.mesh.faces])
 

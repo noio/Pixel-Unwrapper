@@ -743,6 +743,9 @@ class PIXPAINT_OT_uv_flip(bpy.types.Operator):
             if (self.modify_texture):
                 copy_transform_texture_region(texture, island_rect, matrix)
 
+        bmesh.update_edit_mesh(obj.data)
+        return {"FINISHED"}
+
 
 class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
     """Rotate the selected UV Island by 90 degrees (CCW)"""
@@ -756,7 +759,7 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
     def execute(self, context):
 
         bpy.ops.ed.undo_push()
-        obj = context.view_layer.objects.active
+        obj = context.edit_object
         mesh = bmesh.from_edit_mesh(obj.data)
         uv_layer = mesh.loops.layers.uv.verify()
 
@@ -812,7 +815,7 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
                 copy_transform_texture_region(texture, island_rect, matrix)
 
         # THIS INVALIDATES ALL FACE DATA, SO DO IT OUTSIDE OF MAIN LOOP
-        lock_orientation(mesh, [face for face in mesh.faces if face.select], True)
+        lock_orientation(mesh, [face.index for face in mesh.faces if face.select], True)
 
         bmesh.update_edit_mesh(obj.data)
         return {"FINISHED"}
