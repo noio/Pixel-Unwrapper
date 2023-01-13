@@ -119,9 +119,11 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
 
         col = box.column(align=True)
         op = col.operator(
-            "view3d.pixpaint_selected_island_to_free_space", icon="UV_ISLANDSEL"
+            "view3d.pixpaint_island_to_free_space", icon="UV_ISLANDSEL"
         )
         op.modify_texture = context.scene.pixpaint_modify_texture
+
+        op = col.operator("view3d.pixpaint_island_to_random_position", icon="PIVOT_BOUNDBOX")
 
         op = col.operator("view3d.pixpaint_repack_uvs", icon="ALIGN_BOTTOM")
         op.modify_texture = context.scene.pixpaint_modify_texture

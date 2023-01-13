@@ -80,6 +80,11 @@ class PixelArray:
         size: Vector2Int,
         dst_pos: Vector2Int,
     ):
+        """
+        Copy a region of the source texture to this one.
+        The source texture uses wrap mode repeat, so a larger area can be copied
+        without error.
+        """
         matrix = Matrix.Identity(3)
         offset = dst_pos - src_pos
         src_rect = RectInt(src_pos, src_pos + size)

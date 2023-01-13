@@ -1,5 +1,6 @@
 from cgitb import text
 from math import cos, sin, pi
+import random
 
 import bpy
 import bmesh
@@ -11,7 +12,6 @@ from .texture import PixelArray, copy_texture_region, copy_transform_texture_reg
 from .packing import find_free_space_for_island, pack_rects
 from .islands import *
 from .grids import Grid, GridBuildException, GridSnapModes
-
 
 
 class PIXPAINT_OT_detect_texture_size(bpy.types.Operator):
@@ -51,7 +51,7 @@ class PIXPAINT_OT_create_texture(bpy.types.Operator):
         # CREATE NEW TEXTURE AND FILL WITH DEFAULT GRID #
         #################################################
         new_texture = bpy.data.images.new(
-            name= f"{obj.name} Texture" if is_title_case else f"{obj.name}_tex",
+            name=f"{obj.name} Texture" if is_title_case else f"{obj.name}_tex",
             width=context.scene.pixpaint_texture_size,
             height=context.scene.pixpaint_texture_size,
             alpha=True,
@@ -93,8 +93,6 @@ class PIXPAINT_OT_create_texture(bpy.types.Operator):
         ##########################
         mat = obj.active_material
 
-        
-
         if mat is None:
             name = f"{obj.name} Material" if is_title_case else "{obj.name}_mat"
             mat = bpy.data.materials.new(name=f"{obj.name}_mat")
@@ -135,13 +133,16 @@ class PIXPAINT_OT_resize_texture(bpy.types.Operator):
         return obj is not None and find_texture(obj) is not None
 
     def execute(self, context):
-        obj = context.view_layer.objects.active
-        texture = find_texture(obj)
+        active_obj = context.view_layer.objects.active
+        texture = find_texture(active_obj)
         texture_size = texture.size[0]
         new_size = round(texture_size * self.scale)
 
         if self.scale < 1 and texture.is_dirty:
-            self.report({"ERROR"}, f"Please save \"{texture.name}\" first because cropping cannot be undone.")
+            self.report(
+                {"ERROR"},
+                f'Please save "{texture.name}" first because cropping cannot be undone.',
+            )
             return {"CANCELLED"}
 
         if new_size < 2:
@@ -149,7 +150,10 @@ class PIXPAINT_OT_resize_texture(bpy.types.Operator):
             return {"CANCELLED"}
 
         if new_size > 8192:
-            self.report({"ERROR"}, f"New texture would be {new_size} pixels, that's probably too big.")
+            self.report(
+                {"ERROR"},
+                f"New texture would be {new_size} pixels, that's probably too big.",
+            )
             return {"CANCELLED"}
 
         # SCALE UP THE TEXTURE AND PRESERVE THE DATA
@@ -157,17 +161,23 @@ class PIXPAINT_OT_resize_texture(bpy.types.Operator):
         src_pixels = PixelArray(blender_image=texture)
         dst_pixels = PixelArray(size=new_size)
 
-        copy_region_size = Vector2Int( dst_pixels.width,  dst_pixels.height)
-        dst_pixels.copy_region(src_pixels, Vector2Int(0,0), copy_region_size, Vector2Int(0,0))
+        copy_region_size = Vector2Int(dst_pixels.width, dst_pixels.height)
+        dst_pixels.copy_region(
+            src_pixels, Vector2Int(0, 0), copy_region_size, Vector2Int(0, 0)
+        )
 
         texture.scale(new_size, new_size)
         texture.pixels = dst_pixels.pixels
         texture.update()
 
         # UPDATE THE UVS TO SPAN THE SAME PIXELS
-        # FIND ALL OBJECTS THAT USE THE SAME TEXTURE: 
+        # FIND ALL OBJECTS THAT USE THE SAME TEXTURE:
         # (if option enabled, otherwise just do it on active object)
-        objs_to_update_uvs = [obj] if self.only_update_uvs_on_active else context.view_layer.objects
+        objs_to_update_uvs = (
+            [active_obj]
+            if self.only_update_uvs_on_active
+            else context.view_layer.objects
+        )
 
         actual_scale_inv = texture_size / new_size
 
@@ -176,24 +186,26 @@ class PIXPAINT_OT_resize_texture(bpy.types.Operator):
                 obj_textures = find_all_textures(obj_to_update)
 
                 if texture in obj_textures:
-                    if obj.data.is_editmode:
-                        mesh = bmesh.from_edit_mesh(obj.data)
+                    print(f"updating object {obj_to_update}")
+                    if obj_to_update.data.is_editmode:
+                        bm = bmesh.from_edit_mesh(obj_to_update.data)
                     else:
-                        mesh = bmesh.new() 
-                        mesh.from_mesh(obj.data)
-                    
-                    uv_layer = mesh.loops.layers.uv.verify()
+                        bm = bmesh.new()
+                        bm.from_mesh(obj_to_update.data)
 
-                    uvs_scale(mesh.faces, uv_layer, actual_scale_inv)
-                    
-                    if obj.data.is_editmode:
-                        bmesh.update_edit_mesh(obj.data)
-        
+                    uv_layer = bm.loops.layers.uv.verify()
+
+                    uvs_scale(bm.faces, uv_layer, actual_scale_inv)
+
+                    if obj_to_update.data.is_editmode:
+                        bmesh.update_edit_mesh(obj_to_update.data)
+                    else:
+                        bm.to_mesh(obj_to_update.data)
+                    bm.free()
+
         context.scene.pixpaint_texture_size = new_size
 
         return {"FINISHED"}
-
-
 
 
 class PIXPAINT_OT_swap_eraser(bpy.types.Operator):
@@ -216,15 +228,12 @@ class PIXPAINT_OT_swap_eraser(bpy.types.Operator):
         return {"FINISHED"}
 
 
-
-
-
-class PIXPAINT_OT_selected_island_to_free_space(bpy.types.Operator):
-    """Move the selected UV island to a free section on the UV map.
+class PIXPAINT_OT_island_to_free_space(bpy.types.Operator):
+    """Move the selected UV island(s) to a free section on the UV map.
     This is based only on UV islands in the current mesh."""
 
-    bl_idname = "view3d.pixpaint_selected_island_to_free_space"
-    bl_label = "Selection to Free Space"
+    bl_idname = "view3d.pixpaint_island_to_free_space"
+    bl_label = "Island to Free Space"
     bl_options = {"UNDO"}
 
     modify_texture: bpy.props.BoolProperty(default=False)
@@ -234,32 +243,34 @@ class PIXPAINT_OT_selected_island_to_free_space(bpy.types.Operator):
     # (unpinned islands are considered free space)
     ignore_unpinned_islands: bpy.props.BoolProperty(default=True)
 
-    # Should the Island stay in place if it's already in 'free space' 
+    # Should the Island stay in place if it's already in 'free space'
     # (or be moved to bottom left)
     prefer_current_position: bpy.props.BoolProperty(default=False)
 
-    # Should OTHER objects' UV islands also be included (as occupied space) 
+    # Should OTHER objects' UV islands also be included (as occupied space)
     # if they use the same texture
     include_other_objects: bpy.props.BoolProperty(default=True)
 
     def execute(self, context):
         obj = bpy.context.view_layer.objects.active
-        mesh = bmesh.from_edit_mesh(obj.data)
-        uv_layer = mesh.loops.layers.uv.verify()
+        bm = bmesh.from_edit_mesh(obj.data)
+        uv_layer = bm.loops.layers.uv.verify()
 
         texture_size = context.scene.pixpaint_texture_size
 
         # FIND ISLANDS
 
         if self.selection_is_island:
-            selected_faces = [face for face in mesh.faces if face.select]
-            other_faces = [face for face in mesh.faces if not face.select]
-            selected_islands = get_islands_for_faces(mesh, selected_faces, uv_layer)
-            all_islands = get_islands_for_faces(mesh, other_faces, uv_layer)
+            selected_faces = [face for face in bm.faces if face.select]
+            other_faces = [face for face in bm.faces if not face.select]
+            selected_islands = get_islands_for_faces(bm, selected_faces, uv_layer)
+            all_islands = get_islands_for_faces(bm, other_faces, uv_layer)
         else:
             all_islands = get_islands_from_obj(obj, False)
             selected_islands = [
-                isl for isl in all_islands if any(uvf.face.select for uvf in isl.uv_faces)
+                isl
+                for isl in all_islands
+                if any(uvf.face.select for uvf in isl.uv_faces)
             ]
 
         selected_islands = merge_overlapping_islands(selected_islands)
@@ -267,7 +278,7 @@ class PIXPAINT_OT_selected_island_to_free_space(bpy.types.Operator):
         if self.include_other_objects:
             obj_texture = find_texture(obj)
             for other in context.view_layer.objects:
-                if other != obj: # Exclude myself
+                if other != obj:  # Exclude myself
                     if other.type == "MESH":
                         other_textures = find_all_textures(other)
                         if obj_texture in other_textures:
@@ -282,7 +293,9 @@ class PIXPAINT_OT_selected_island_to_free_space(bpy.types.Operator):
             island.calc_pixel_bounds(texture_size)
 
             # continue
-            new_pos = find_free_space_for_island(island, all_islands, texture_size, self.prefer_current_position)
+            new_pos = find_free_space_for_island(
+                island, all_islands, texture_size, self.prefer_current_position
+            )
             old_pos = island.pixel_bounds.min
 
             offset = (new_pos - old_pos) / texture_size
@@ -347,13 +360,16 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
 
             rects.append(rect_size)
 
-        # Try one size smaller (but only if the texture can be divided by 2) 
+        # Try one size smaller (but only if the texture can be divided by 2)
         # and only if we're allowed to modify the texture
         min_size = texture_size // 2 if (texture_size % 2 == 0) else texture_size
         new_positions, needed_size = pack_rects(rects, min_size)
 
         if needed_size > texture_size:
-            self.report({"ERROR"}, "Texture is not big enough for UV islands. Repacking might lose data. Resize texture first.")
+            self.report(
+                {"ERROR"},
+                "Texture is not big enough for UV islands. Repacking might lose data. Resize texture first.",
+            )
             return {"CANCELLED"}
 
         modify_texture = self.modify_texture and texture is not None
@@ -381,9 +397,7 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
                 pivot = Vector((old_pos.x + h, old_pos.y + h)) / texture_size
                 uvs_rotate_90_degrees(faces, uv_layer, pivot)
 
-            uvs_translate_rotate_scale(
-                faces, uv_layer, translate=offset
-            )
+            uvs_translate_rotate_scale(faces, uv_layer, translate=offset)
 
             if modify_texture:
                 dst_pixels.copy_region_from(
@@ -430,8 +444,7 @@ class PIXPAINT_OT_unwrap_pixel_grid(bpy.types.Operator):
 
     bl_idname = "view3d.pixpaint_unwrap_pixel_grid"
     bl_label = "Unwrap Grid"
-    bl_options = {"REGISTER","UNDO"}
-
+    bl_options = {"REGISTER", "UNDO"}
 
     snap: bpy.props.EnumProperty(name="Snap Vertices", items=GridSnapModes)
 
@@ -442,10 +455,10 @@ class PIXPAINT_OT_unwrap_pixel_grid(bpy.types.Operator):
         target_density = context.scene.pixpaint_texel_density
 
         obj = bpy.context.view_layer.objects.active
-        mesh = bmesh.from_edit_mesh(obj.data)
-        uv_layer = mesh.loops.layers.uv.verify()
+        bm = bmesh.from_edit_mesh(obj.data)
+        uv_layer = bm.loops.layers.uv.verify()
 
-        all_target_faces = [face for face in mesh.faces if face.select]
+        all_target_faces = [face for face in bm.faces if face.select]
 
         for quad_group, connected_non_quads in zip(*find_quad_groups(all_target_faces)):
             print(
@@ -467,7 +480,7 @@ class PIXPAINT_OT_unwrap_pixel_grid(bpy.types.Operator):
             )
 
             try:
-                grid = Grid(mesh, quad_group)
+                grid = Grid(bm, quad_group)
             except GridBuildException as e:
                 self.report({"ERROR"}, str(e))
                 return {"CANCELLED"}
@@ -493,7 +506,7 @@ class PIXPAINT_OT_unwrap_pixel_grid(bpy.types.Operator):
             # )
             uvs_pin(connected_non_quads, uv_layer)
 
-            bpy.ops.view3d.pixpaint_selected_island_to_free_space(modify_texture=False)
+            bpy.ops.view3d.pixpaint_island_to_free_space(modify_texture=False)
 
         # Wrap things up: Reselect all faces (because we messed with selections)
         for face in all_target_faces:
@@ -502,7 +515,6 @@ class PIXPAINT_OT_unwrap_pixel_grid(bpy.types.Operator):
         bmesh.update_edit_mesh(obj.data)
 
         return {"FINISHED"}
-
 
 
 class PIXPAINT_OT_unwrap_extend(bpy.types.Operator):
@@ -557,10 +569,10 @@ class PIXPAINT_OT_unwrap_basic(bpy.types.Operator):
         target_density = context.scene.pixpaint_texel_density
 
         obj = bpy.context.view_layer.objects.active
-        mesh = bmesh.from_edit_mesh(obj.data)
-        uv_layer = mesh.loops.layers.uv.verify()
+        bm = bmesh.from_edit_mesh(obj.data)
+        uv_layer = bm.loops.layers.uv.verify()
 
-        selected_faces = list(face for face in mesh.faces if face.select)
+        selected_faces = list(face for face in bm.faces if face.select)
         uvs_pin(selected_faces, uv_layer, False)
 
         bpy.ops.uv.unwrap(
@@ -573,11 +585,11 @@ class PIXPAINT_OT_unwrap_basic(bpy.types.Operator):
 
         # Scale to texel density
         uvs_scale_texel_density(
-            mesh, selected_faces, uv_layer, texture_size, target_density
+            bm, selected_faces, uv_layer, texture_size, target_density
         )
 
         # Round the total size of the island to a whole number of pixels
-        island = UVIsland(selected_faces, mesh, uv_layer)
+        island = UVIsland(selected_faces, bm, uv_layer)
         size = island.max - island.min
         pixel_size = size * texture_size
         rounded_size = Vector((round(pixel_size.x), round(pixel_size.y))) / texture_size
@@ -593,7 +605,7 @@ class PIXPAINT_OT_unwrap_basic(bpy.types.Operator):
         #     selected_faces, uv_layer, texture_size, skip_pinned=True
         # )
 
-        bpy.ops.view3d.pixpaint_selected_island_to_free_space(modify_texture=False)
+        bpy.ops.view3d.pixpaint_island_to_free_space(modify_texture=False)
 
         uvs_pin(selected_faces, uv_layer)
 
@@ -651,7 +663,7 @@ class PIXPAINT_OT_unwrap_single_pixel(bpy.types.Operator):
 
         bmesh.update_edit_mesh(obj.data)
 
-        bpy.ops.view3d.pixpaint_selected_island_to_free_space(modify_texture=False)
+        bpy.ops.view3d.pixpaint_island_to_free_space(modify_texture=False)
 
         return {"FINISHED"}
 
@@ -661,7 +673,7 @@ class PIXPAINT_OT_uv_grid_fold(bpy.types.Operator):
 
     bl_idname = "view3d.pixpaint_uv_grid_fold"
     bl_label = "Fold UV Grid"
-    bl_options = {"REGISTER","UNDO"}
+    bl_options = {"REGISTER", "UNDO"}
 
     x_sections: bpy.props.IntProperty(default=2, name="X Sections")
     y_sections: bpy.props.IntProperty(default=1, name="Y Sections")
@@ -669,14 +681,14 @@ class PIXPAINT_OT_uv_grid_fold(bpy.types.Operator):
 
     def execute(self, context):
         obj = context.view_layer.objects.active
-        mesh = bmesh.from_edit_mesh(obj.data)
-        uv_layer = mesh.loops.layers.uv.verify()
+        bm = bmesh.from_edit_mesh(obj.data)
+        uv_layer = bm.loops.layers.uv.verify()
 
-        all_target_faces = [face for face in mesh.faces if face.select]
+        all_target_faces = [face for face in bm.faces if face.select]
 
         for quad_group, _ in zip(*find_quad_groups(all_target_faces)):
             try:
-                grid = Grid(mesh, quad_group)
+                grid = Grid(bm, quad_group)
                 grid.realign_to_uv_map(uv_layer)
                 grid.fold(uv_layer, self.x_sections, self.y_sections, self.alternate)
             except GridBuildException as e:
@@ -685,6 +697,7 @@ class PIXPAINT_OT_uv_grid_fold(bpy.types.Operator):
 
         bmesh.update_edit_mesh(obj.data)
         return {"FINISHED"}
+
 
 class PIXPAINT_OT_uv_flip(bpy.types.Operator):
     """Flip the selected UV Island"""
@@ -703,8 +716,8 @@ class PIXPAINT_OT_uv_flip(bpy.types.Operator):
 
     def execute(self, context):
         obj = context.view_layer.objects.active
-        mesh = bmesh.from_edit_mesh(obj.data)
-        uv_layer = mesh.loops.layers.uv.verify()
+        bm = bmesh.from_edit_mesh(obj.data)
+        uv_layer = bm.loops.layers.uv.verify()
 
         texture_size = context.scene.pixpaint_texture_size
 
@@ -719,28 +732,28 @@ class PIXPAINT_OT_uv_flip(bpy.types.Operator):
             island_rect = island.pixel_bounds
 
             if self.flip_axis == "X":
-                matrix = Matrix.Diagonal((-1,1,1))
+                matrix = Matrix.Diagonal((-1, 1, 1))
                 pivot = (island_rect.min + island_rect.max) / 2
             elif self.flip_axis == "Y":
-                matrix = Matrix.Diagonal((1,-1,1))
+                matrix = Matrix.Diagonal((1, -1, 1))
                 pivot = (island_rect.min + island_rect.max) / 2
 
             pivot = pivot.to_3d()
-            pivot.z = 1 # Make Homogeneous Vector
+            pivot.z = 1  # Make Homogeneous Vector
             transformed_pivot = matrix @ pivot
             offset_tex = pivot - transformed_pivot
-            
+
             matrix[0][2] = offset_tex[0]
             matrix[1][2] = offset_tex[1]
-            
+
             offset_uv = offset_tex / texture_size
             matrix_uv = matrix.copy()
             matrix_uv[0][2] = offset_uv[0]
             matrix_uv[1][2] = offset_uv[1]
-            
+
             uvs_transform(island.get_faces(), uv_layer, matrix_uv)
 
-            if (self.modify_texture):
+            if self.modify_texture:
                 copy_transform_texture_region(texture, island_rect, matrix)
 
         bmesh.update_edit_mesh(obj.data)
@@ -760,11 +773,11 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
 
         bpy.ops.ed.undo_push()
         obj = context.edit_object
-        mesh = bmesh.from_edit_mesh(obj.data)
-        uv_layer = mesh.loops.layers.uv.verify()
+        bm = bmesh.from_edit_mesh(obj.data)
+        uv_layer = bm.loops.layers.uv.verify()
 
         texture_size = context.scene.pixpaint_texture_size
-        texture_rect = RectInt(Vector2Int(0,0), Vector2Int(texture_size, texture_size))
+        texture_rect = RectInt(Vector2Int(0, 0), Vector2Int(texture_size, texture_size))
 
         # FIND ISLANDS
         islands = get_islands_from_obj(obj, True)
@@ -775,19 +788,19 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
 
             island.calc_pixel_bounds(texture_size)
             island_rect = island.pixel_bounds
-            
-            matrix = Matrix.Rotation(radians(90),2).to_3x3()
+
+            matrix = Matrix.Rotation(radians(90), 2).to_3x3()
             h = island.pixel_bounds.size.y / 2
             pivot = Vector((island_rect.min.x + h, island_rect.min.y + h))
 
             pivot = pivot.to_3d()
-            pivot.z = 1 # Make Homogeneous Vector
+            pivot.z = 1  # Make Homogeneous Vector
             transformed_pivot = matrix @ pivot
             offset_tex = pivot - transformed_pivot
-            
+
             matrix[0][2] = offset_tex[0]
             matrix[1][2] = offset_tex[1]
-            
+
             offset_uv = offset_tex / texture_size
             matrix_uv = matrix.copy()
             matrix_uv[0][2] = offset_uv[0]
@@ -795,27 +808,84 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
 
             uvs_transform(island.get_faces(), uv_layer, matrix_uv)
 
-            if (self.modify_texture):
-                # When rotating, the bounds change, so we need to find some 
+            if self.modify_texture:
+                # When rotating, the bounds change, so we need to find some
                 # FREE SPACE on the texture to move the island to.
                 # Otherwise, when flipping X / Y we can just do that in-place
                 old_pos = island.pixel_bounds.min
-                bpy.ops.view3d.pixpaint_selected_island_to_free_space(modify_texture=False)
+                bpy.ops.view3d.pixpaint_island_to_free_space(
+                    modify_texture=False
+                )
                 island.calc_info()
                 island.calc_pixel_bounds(texture_size)
-                if not texture_rect.contains(island.pixel_bounds.min, island.pixel_bounds.size):
-                    self.report({"ERROR"}, f"Not enough free space on texture to rotate island. Increase texture size or turn off 'Modify Texture'")
+                if not texture_rect.contains(
+                    island.pixel_bounds.min, island.pixel_bounds.size
+                ):
+                    self.report(
+                        {"ERROR"},
+                        f"Not enough free space on texture to rotate island. Increase texture size or turn off 'Modify Texture'",
+                    )
                     bpy.ops.ed.undo()
                     return {"CANCELLED"}
                 new_pos = island.pixel_bounds.min
                 move = new_pos - old_pos
                 matrix[0][2] += move.x
                 matrix[1][2] += move.y
-                
+
                 copy_transform_texture_region(texture, island_rect, matrix)
 
         # THIS INVALIDATES ALL FACE DATA, SO DO IT OUTSIDE OF MAIN LOOP
-        lock_orientation(mesh, [face.index for face in mesh.faces if face.select], True)
+        lock_orientation(bm, [face.index for face in bm.faces if face.select], True)
+
+        bmesh.update_edit_mesh(obj.data)
+        return {"FINISHED"}
+
+
+class PIXPAINT_OT_island_to_random_position(bpy.types.Operator):
+    """
+    Move the selected island(s) to a random position inside the
+    UV bounds
+    """
+
+    bl_idname = "view3d.pixpaint_island_to_random_position"
+    bl_label = "Island to Random"
+    bl_options = {"UNDO"}
+
+    modify_texture: bpy.props.BoolProperty(default=False, name="Modify Texture")
+
+    def execute(self, context):
+
+        bpy.ops.ed.undo_push()
+        obj = context.edit_object
+        bm = bmesh.from_edit_mesh(obj.data)
+        uv_layer = bm.loops.layers.uv.verify()
+
+        texture_size = context.scene.pixpaint_texture_size
+        texture_rect = RectInt(Vector2Int(0, 0), Vector2Int(texture_size, texture_size))
+
+        # FIND ISLANDS
+        islands = get_islands_from_obj(obj, True)
+
+        texture = find_texture(obj)
+
+        for island in islands:
+
+            island.calc_pixel_bounds(texture_size)
+            island_rect = island.pixel_bounds
+
+            min_x = texture_rect.min.x
+            min_y = texture_rect.min.y
+            tr = texture_rect.max - island_rect.size
+            # ensure no negative coords
+            max_x = max(min_x, texture_rect.max.x - island_rect.size.x)
+            max_y = max(min_y, texture_rect.max.y - island_rect.size.y)
+
+            tx = (random.randint(min_x, max_x) - island_rect.min.x)/texture_size
+            ty = (random.randint(min_y, max_y) - island_rect.min.y)/texture_size
+            
+            matrix_uv = Matrix.Translation(Vector((tx, ty, 0)))
+
+            uvs_transform(island.get_faces(), uv_layer, matrix_uv)
 
         bmesh.update_edit_mesh(obj.data)
         return {"FINISHED"}

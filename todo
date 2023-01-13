@@ -72,3 +72,5 @@ MORE BUGS
 
  - [x] Flipping and rotating is broken (check vegetation file: reed)
  - [ ] Selection to free space on multiple islands makes them overlap
+ - [x] Doubling texture size is broken and results in some weird scaling of the UV islands
+ - [x] Button to move island to random position inside texture? Useful for material textures.
