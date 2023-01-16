@@ -813,9 +813,7 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
                 # FREE SPACE on the texture to move the island to.
                 # Otherwise, when flipping X / Y we can just do that in-place
                 old_pos = island.pixel_bounds.min
-                bpy.ops.view3d.pixpaint_island_to_free_space(
-                    modify_texture=False
-                )
+                bpy.ops.view3d.pixpaint_island_to_free_space(modify_texture=False)
                 island.calc_info()
                 island.calc_pixel_bounds(texture_size)
                 if not texture_rect.contains(
@@ -849,9 +847,12 @@ class PIXPAINT_OT_island_to_random_position(bpy.types.Operator):
 
     bl_idname = "view3d.pixpaint_island_to_random_position"
     bl_label = "Island to Random"
-    bl_options = {"UNDO"}
+    bl_options = {"UNDO", "REGISTER"}
 
-    modify_texture: bpy.props.BoolProperty(default=False, name="Modify Texture")
+    x_min: bpy.props.FloatProperty(name="X Min", default=0, min=0, max=1)
+    x_max: bpy.props.FloatProperty(name="X Max", default=1, min=0, max=1)
+    y_min: bpy.props.FloatProperty(name="Y Min", default=0, min=0, max=1)
+    y_max: bpy.props.FloatProperty(name="Y Max", default=1, min=0, max=1)
 
     def execute(self, context):
 
@@ -861,28 +862,27 @@ class PIXPAINT_OT_island_to_random_position(bpy.types.Operator):
         uv_layer = bm.loops.layers.uv.verify()
 
         texture_size = context.scene.pixpaint_texture_size
-        texture_rect = RectInt(Vector2Int(0, 0), Vector2Int(texture_size, texture_size))
+        min_x = floor(texture_size * self.x_min)
+        min_y = floor(texture_size * self.y_min)
+
+        # ensure no negative coords
+        max_x_bound = ceil(texture_size * self.x_max)
+        max_y_bound = ceil(texture_size * self.y_max)
 
         # FIND ISLANDS
         islands = get_islands_from_obj(obj, True)
-
-        texture = find_texture(obj)
 
         for island in islands:
 
             island.calc_pixel_bounds(texture_size)
             island_rect = island.pixel_bounds
 
-            min_x = texture_rect.min.x
-            min_y = texture_rect.min.y
-            tr = texture_rect.max - island_rect.size
-            # ensure no negative coords
-            max_x = max(min_x, texture_rect.max.x - island_rect.size.x)
-            max_y = max(min_y, texture_rect.max.y - island_rect.size.y)
+            max_x = max(min_x, max_x_bound - island_rect.size.x)
+            max_y = max(min_y, max_y_bound - island_rect.size.y)
 
-            tx = (random.randint(min_x, max_x) - island_rect.min.x)/texture_size
-            ty = (random.randint(min_y, max_y) - island_rect.min.y)/texture_size
-            
+            tx = (random.randint(min_x, max_x) - island_rect.min.x) / texture_size
+            ty = (random.randint(min_y, max_y) - island_rect.min.y) / texture_size
+
             matrix_uv = Matrix.Translation(Vector((tx, ty, 0)))
 
             uvs_transform(island.get_faces(), uv_layer, matrix_uv)
