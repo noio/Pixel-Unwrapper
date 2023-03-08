@@ -77,5 +77,4 @@ MORE BUGS
 
  - [ ] Dim the colors of the default texture to better see seams when unwrapping
  - [ ] When multiple objects are in the scene with same texture, repack should work on all of them
- - [ ] Repack is broken when modifying texture? I'm getting some "copy_region_from" does not exist. 
-       (and it messes up the model)
+ - [x] Repack is broken when modifying texture? I'm getting some "copy_region_from" does not exist. 
