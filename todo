@@ -78,3 +78,6 @@ MORE BUGS
  - [ ] Dim the colors of the default texture to better see seams when unwrapping
  - [ ] When multiple objects are in the scene with same texture, repack should work on all of them
  - [x] Repack is broken when modifying texture? I'm getting some "copy_region_from" does not exist. 
+
+ - [ ] flip operators should also require texture save
+ - [ ] flip operator on overlapping islands does really weird stuff
