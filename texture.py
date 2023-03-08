@@ -129,7 +129,7 @@ class PixelArray:
         dst_max_x = min(self.width, ceil(max(bl.x, br.x, tl.x, tr.x)))
         dst_max_y = min(self.height, ceil(max(bl.y, br.y, tl.y, tr.y)))
 
-        print(f"X: {dst_min_x}-{dst_max_x} Y: {dst_min_y}-{dst_max_y}")
+        # print(f"X: {dst_min_x}-{dst_max_x} Y: {dst_min_y}-{dst_max_y}")
 
         # We need the inverse transform, cause we want to check
         # for each point in the dest-bounds if it falls within the

@@ -143,6 +143,22 @@ def vert_between_edges(edge_a, edge_b):
     elif edge_a.verts[1] in edge_b.verts:
         return edge_a.verts[1]
 
+def get_uv_space_matrix(matrix: Matrix, texture_size):
+    scale_up = Matrix.Scale(texture_size, 3)
+    scale_up[2][2] = 1
+    scale_down = Matrix.Scale(1.0/texture_size, 3)
+    scale_down[2][2] = 1
+    return scale_down @ matrix @ scale_up
+
+def matrix_pin_pivot(matrix: Matrix, pivot: Vector):
+    pivot = pivot.to_3d()
+    pivot.z = 1  # Make Homogeneous Vector
+    transformed_pivot = matrix @ pivot
+    pivot_offset = pivot - transformed_pivot
+
+    matrix[0][2] += pivot_offset[0]
+    matrix[1][2] += pivot_offset[1]
+
 
 def uv_vert_between_edges(face: BMFace, edge_a, edge_b):
     for loop in face.loops:
