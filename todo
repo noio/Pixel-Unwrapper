@@ -74,3 +74,8 @@ MORE BUGS
  - [ ] Selection to free space on multiple islands makes them overlap
  - [x] Doubling texture size is broken and results in some weird scaling of the UV islands
  - [x] Button to move island to random position inside texture? Useful for material textures.
+
+ - [ ] Dim the colors of the default texture to better see seams when unwrapping
+ - [ ] When multiple objects are in the scene with same texture, repack should work on all of them
+ - [ ] Repack is broken when modifying texture? I'm getting some "copy_region_from" does not exist. 
+       (and it messes up the model)

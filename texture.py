@@ -13,7 +13,7 @@ def copy_texture_region(texture, src_pos, size, dst_pos):
     texture.pixels = dst_pixels.pixels
     texture.update()
 
-def copy_transform_texture_region(texture, region:RectInt, transform:Matrix):
+def copy_texture_region_transformed(texture, region:RectInt, transform:Matrix):
     src_pixels = PixelArray(blender_image=texture)
     dst_pixels = PixelArray(blender_image=texture)
     dst_pixels.copy_region_transformed(src_pixels, region, transform)
