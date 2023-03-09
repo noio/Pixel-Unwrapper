@@ -80,4 +80,4 @@ MORE BUGS
  - [x] Repack is broken when modifying texture? I'm getting some "copy_region_from" does not exist. 
 
  - [ ] flip operators should also require texture save
- - [ ] flip operator on overlapping islands does really weird stuff
+ - [x] flip operator on overlapping islands does really weird stuff

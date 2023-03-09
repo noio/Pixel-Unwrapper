@@ -42,12 +42,12 @@ class PixelArray:
                 light = (row + col) % 2 == 0
                 if left:
                     if top:
-                        col = [0.8, 0, 0, 1]  # RED
+                        col = [0.7, 0.3, 0.3, 1]  # RED
                     else:
-                        col = [0.4, 0.4, 1, 1]  # BLUE
+                        col = [0.4, 0.4, 0.8, 1]  # BLUE
                 else:
                     if top:
-                        col = [0, 0.8, 0, 1]  # GREEN
+                        col = [0.3, 0.7, 0.3, 1]  # GREEN
                     else:
                         col = [1, 0.6, 0, 1]  # YELLOW
 

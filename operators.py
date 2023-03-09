@@ -738,6 +738,7 @@ class PIXPAINT_OT_uv_flip(bpy.types.Operator):
 
         # FIND ISLANDS
         islands = get_islands_from_obj(obj, True)
+        islands = merge_overlapping_islands(islands)
 
         texture = find_texture(obj)
 
@@ -789,6 +790,7 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
 
         # FIND ISLANDS
         islands = get_islands_from_obj(obj, True)
+        islands = merge_overlapping_islands(islands)
 
         texture = find_texture(obj)
 
@@ -804,15 +806,23 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
             matrix_pin_pivot(matrix, pivot)
 
             matrix_uv = get_uv_space_matrix(matrix, texture_size)
-
             uvs_transform(island.get_faces(), uv_layer, matrix_uv)
 
+            # When rotating, the bounds change, so we need to find some
+            # FREE SPACE on the texture to move the island to.
+            # We do this AFTER already having rotated the UV's, so
+            # free space is found for the rotated island.
+            # but we do the TEXTURE modification afterwards, for the
+            # entire transformation in one (rotate + move to free space)
+            old_pos = island.pixel_bounds.min
+            bpy.ops.view3d.pixpaint_island_to_free_space(modify_texture=False)
+            new_pos = island.pixel_bounds.min
+            offset = new_pos - old_pos
+            matrix[0][2] += offset.x
+            matrix[1][2] += offset.y
+
             if self.modify_texture and texture is not None:
-                # When rotating, the bounds change, so we need to find some
-                # FREE SPACE on the texture to move the island to.
-                # Otherwise, when flipping X / Y we can just do that in-place
-                old_pos = island.pixel_bounds.min
-                bpy.ops.view3d.pixpaint_island_to_free_space(modify_texture=False)
+                
                 island.calc_info()
                 island.calc_pixel_bounds(texture_size)
                 if not texture_rect.contains(
@@ -824,10 +834,7 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
                     )
                     bpy.ops.ed.undo()
                     return {"CANCELLED"}
-                new_pos = island.pixel_bounds.min
-                offset = new_pos - old_pos
-                matrix[0][2] += offset.x
-                matrix[1][2] += offset.y
+                
 
                 copy_texture_region_transformed(texture, island_rect, matrix)
 
