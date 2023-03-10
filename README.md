@@ -9,3 +9,4 @@ Go to [Releases](https://github.com/noio/pixpaint/releases/latest) and download 
 
 ## Usage
 
+<iframe width="560" height="315" src="https://www.youtube.com/embed/TQ1_ig4NVmk" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
