@@ -5,4 +5,4 @@
 
 ## Installation
 
-Go to [Releases](https://github.com/noio/pixpaint/releases) and download the latest release. Then go to Blender Preferences, `Add-ons`, and click `Install...`. 
+Go to [Releases](https://github.com/noio/pixpaint/releases) and download the latest release. Then go to Blender Preferences, `Add-ons`, click `Install...` and select the .zip file.
