@@ -83,4 +83,7 @@ MORE BUGS
  - [ ] flip operators should also require texture save
  - [x] flip operator on overlapping islands does really weird stuff
  - [ ] flip/rotate on multiple islands is probably still broken
+
+ - [ ] Blender crashes when: Doubling a texture size, then attempting to "Unwrap Grid"
+ - [ ] "Island to Free Space" does not preserve texture?
  
