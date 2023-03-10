@@ -611,7 +611,10 @@ class PIXPAINT_OT_unwrap_basic(bpy.types.Operator):
         scale = Vector((rounded_size.x / size.x, rounded_size.y / size.y))
         uvs_scale(selected_faces, uv_layer, scale)
 
+        print(f"BASIC UNWRAP: {size=} {pixel_size=} {rounded_size=} {scale=}")
+
         # Position it so that corners are on texel corners
+        island = UVIsland(selected_faces, bm, uv_layer)
         center = 0.5 * (island.max + island.min)
         offset = rounded_size / 2 - center
         uvs_translate_rotate_scale(selected_faces, uv_layer, offset)
