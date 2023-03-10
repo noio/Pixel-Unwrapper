@@ -10,4 +10,4 @@ Go to [Releases](https://github.com/noio/pixpaint/releases/latest) and download 
 ## Usage
 
 
-[![Walkthrough on YouTube](https://user-images.githubusercontent.com/271730/224333278-0fdfa82c-cd5d-4601-a2b8-563e29f4f493.png)](https://youtu.be/TQ1_ig4NVmk)
+[![Walkthrough on YouTube](https://user-images.githubusercontent.com/271730/224333278-0fdfa82c-cd5d-4601-a2b8-563e29f4f493.png)](https://youtu.be/9ao1PM7GTS8)
