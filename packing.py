@@ -83,32 +83,33 @@ def find_free_space_for_island(
 ):
 
     candidate_positions = [Vector2Int(0, 0)]
+    current_rect = target_island.calc_pixel_bounds(texture_size)
 
     rects = []
     for uv_island in all_islands:
-        uv_island.calc_pixel_bounds(texture_size)
         if uv_island != target_island:
-            rects.append(uv_island.pixel_bounds)
+            island_rect = uv_island.calc_pixel_bounds(texture_size)
+            rects.append(island_rect)
             candidate_positions.append(
-                Vector2Int(uv_island.pixel_bounds.max.x, uv_island.pixel_bounds.min.y)
+                Vector2Int(island_rect.max.x, island_rect.min.y)
             )
             candidate_positions.append(
-                Vector2Int(uv_island.pixel_bounds.min.x, uv_island.pixel_bounds.max.y)
+                Vector2Int(island_rect.min.x, island_rect.max.y)
             )
 
     candidate_positions.sort(key=lambda p: (p.y, p.x))
 
     if prefer_current_position:
         # Try at the existing position first! No need to move islands if space is free
-        candidate_positions.insert(0, target_island.pixel_bounds.min)
+        candidate_positions.insert(0, current_rect.min)
     else:
-        candidate_positions.append(target_island.pixel_bounds.min)
+        candidate_positions.append(current_rect.min)
 
     tex_min = Vector2Int(0, 0)
     tex_max = Vector2Int(texture_size, texture_size)
     tex_rect = RectInt(tex_min, tex_max)
 
-    size = target_island.pixel_bounds.size
+    size = current_rect.size
     for p in candidate_positions:
         if tex_rect.contains(p, size):
             if not any(r.overlaps(p, size) for r in rects):

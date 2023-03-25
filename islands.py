@@ -22,7 +22,6 @@ class UVFace:
         self.uv_layer = uv_layer
 
     def calc_info(self):
-
         ma = Vector((-10000000.0, -10000000.0))
         mi = Vector((10000000.0, 10000000.0))
         center = Vector((0, 0))
@@ -50,22 +49,25 @@ class UVIsland:
     max: Vector
     min: Vector
     average_uv: Vector
-    pixel_bounds: RectInt = None
+    # pixel_bounds: RectInt = None
     uv_layer: any
 
     def __init__(self, bmfaces: "list[BMFace]", mesh: "BMesh", uv_layer):
         self.mesh = mesh
         self.uv_faces = [UVFace(f, uv_layer) for f in bmfaces]
         self.uv_layer = uv_layer
-        self.calc_info()
+        self.update_min_max()
 
-    def calc_info(self):
+    def update_min_max(self):
+        """
+        Update the min/max values of this island
+        based on the faces it contains
+        """
         self.max = Vector((-10000000.0, -10000000.0))
         self.min = Vector((10000000.0, 10000000.0))
         self.average_uv = Vector((0.0, 0.0))
         self.num_uv = 0
         for face in self.uv_faces:
-            
             face.calc_info()
 
             self.average_uv += sum(
@@ -95,7 +97,7 @@ class UVIsland:
         mi = Vector2Int(xmin, ymin)
         ma = Vector2Int(xmax, ymax)
 
-        self.pixel_bounds = RectInt(mi, ma)
+        return RectInt(mi, ma)
 
     def merge(self, other: "UVIsland"):
         self.max = elem_max(self.max, other.max)
@@ -109,8 +111,8 @@ class UVIsland:
         self.uv_faces.extend(other.uv_faces)
         self.num_uv += other.num_uv
 
-        if self.pixel_bounds is not None and other.pixel_bounds is not None:
-            self.pixel_bounds.encapsulate(other.pixel_bounds)
+        # if self.pixel_bounds is not None and other.pixel_bounds is not None:
+        #     self.pixel_bounds.encapsulate(other.pixel_bounds)
 
     def get_faces(self):
         return (uv_face.face for uv_face in self.uv_faces)
@@ -118,10 +120,9 @@ class UVIsland:
     def is_any_pinned(self):
         return any_pinned(self.get_faces(), self.mesh.loops.layers.uv.verify())
 
-
     def is_any_orientation_locked(self):
         # try:
-        lock_layer = self.mesh.faces.layers.int.get('orientation_locked')
+        lock_layer = self.mesh.faces.layers.int.get("orientation_locked")
         if lock_layer is None:
             return False
         # print(f"{lock_layer=}")
@@ -136,7 +137,7 @@ def get_islands_from_obj(obj, only_selected=True) -> "list[UVIsland]":
     if obj.data.is_editmode:
         mesh = bmesh.from_edit_mesh(obj.data)
     else:
-        mesh = bmesh.new() 
+        mesh = bmesh.new()
         mesh.from_mesh(obj.data)
 
     mesh.faces.ensure_lookup_table()
@@ -158,7 +159,6 @@ def get_islands_from_mesh(mesh: "BMesh", only_selected=True) -> "list[UVIsland]"
 
 
 def get_islands_for_faces(mesh: "BMesh", faces, uv_layer) -> "list[UVIsland]":
-
     # Build two lookups for
     # all verts that makes up a face
     # all faces using a vert
@@ -249,8 +249,6 @@ def get_connected_components(nodes, get_connections_for_node):
 
         connected_components.append(current_component)
     return connected_components
-
-
 
 
 def find_quad_groups(faces):

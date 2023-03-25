@@ -60,27 +60,6 @@ class PIXPAINT_OT_create_texture(bpy.types.Operator):
         pixels = PixelArray(None, context.scene.pixpaint_texture_size)
         new_texture.pixels = pixels.pixels
 
-        # DON'T SAVE, this could be dangerous as it just whams the texture
-        # over any existing file with the same name.
-        # Prefer to just let the user click save and a destination.
-
-        # if len(new_texture.filepath_raw) == 0 or new_texture.filepath_raw is None:
-        #     # If the image was never saved, set the filepath
-        #     texture_path = bpy.path.abspath("//Textures")
-        #     if not os.path.exists(texture_path):
-        #         os.mkdir(texture_path)
-        #     else:
-        #         # Ensure that the path is actually that of the OS
-        #         # Avoid errors when textures are in "//textures" (lower case)
-        #         texture_path = get_path_true_case(texture_path)
-
-        #     filepath_rel = bpy.path.relpath(
-        #         os.path.join(texture_path, new_texture.name + ".png")
-        #     )
-        #     new_texture.filepath_raw = filepath_rel
-        #     new_texture.file_format = "PNG"
-        # new_texture.save()
-
         ##############################
         # SET UV EDITOR TO NEW IMAGE #
         ##############################
@@ -95,7 +74,7 @@ class PIXPAINT_OT_create_texture(bpy.types.Operator):
 
         if mat is None:
             name = f"{obj.name} Material" if is_title_case else "{obj.name}_mat"
-            mat = bpy.data.materials.new(name=f"{obj.name}_mat")
+            mat = bpy.data.materials.new(name=name)
             obj.data.materials.append(mat)
 
         # Set up shader nodes
@@ -216,7 +195,6 @@ class PIXPAINT_OT_swap_eraser(bpy.types.Operator):
     bl_options = {"UNDO"}
 
     def execute(self, context):
-
         if not hasattr(self, "previous_blend"):
             self.previous_blend = "MIX"
         if bpy.context.tool_settings.image_paint.brush.blend != "ERASE_ALPHA":
@@ -229,15 +207,17 @@ class PIXPAINT_OT_swap_eraser(bpy.types.Operator):
 
 
 class PIXPAINT_OT_island_to_free_space(bpy.types.Operator):
-    """Move the selected UV island(s) to a free section on the UV map.
-    This is based only on UV islands in the current mesh."""
+    """Move the selected UV island(s) to a free section on the UV map."""
 
     bl_idname = "view3d.pixpaint_island_to_free_space"
     bl_label = "Island to Free Space"
     bl_options = {"UNDO"}
 
     modify_texture: bpy.props.BoolProperty(default=False)
-    selection_is_island: bpy.props.BoolProperty(default=True)
+
+    # Should the entire UV island be moved, as opposed to just the
+    # SELECTED part of the UV island
+    move_entire_island: bpy.props.BoolProperty(default=True)
 
     # If True: only Islands with Pinned verts will count as occupied
     # (unpinned islands are considered free space)
@@ -260,7 +240,7 @@ class PIXPAINT_OT_island_to_free_space(bpy.types.Operator):
 
         # FIND ISLANDS
 
-        if self.selection_is_island:
+        if not self.move_entire_island:
             selected_faces = [face for face in bm.faces if face.select]
             other_faces = [face for face in bm.faces if not face.select]
             selected_islands = get_islands_for_faces(bm, selected_faces, uv_layer)
@@ -290,13 +270,13 @@ class PIXPAINT_OT_island_to_free_space(bpy.types.Operator):
         modify_texture = self.modify_texture
 
         for island in selected_islands:
-            island.calc_pixel_bounds(texture_size)
+            pixel_bounds_old = island.calc_pixel_bounds(texture_size)
+            print(f"finding free space for island {pixel_bounds_old.min}")
+            old_pos = pixel_bounds_old.min
 
-            # continue
             new_pos = find_free_space_for_island(
                 island, all_islands, texture_size, self.prefer_current_position
             )
-            old_pos = island.pixel_bounds.min
 
             offset = (new_pos - old_pos) / texture_size
 
@@ -307,10 +287,17 @@ class PIXPAINT_OT_island_to_free_space(bpy.types.Operator):
                 texture = find_texture(obj)
                 if texture:
                     copy_texture_region(
-                        texture, old_pos, island.pixel_bounds.size, new_pos
+                        texture, old_pos, pixel_bounds_old.size, new_pos
                     )
 
             uvs_pin(island.get_faces(), uv_layer)
+            
+            island.update_min_max()
+
+            # Append the moved island to all_islands,
+            # so that it is taken into account (as occupied space)
+            # when finding a place for the next island in this loop
+            all_islands.append(island)
 
         bmesh.update_edit_mesh(obj.data)
 
@@ -339,16 +326,14 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
 
         # FIND ISLANDS
         islands = get_islands_from_obj(obj, False)
-
-        for island in islands:
-            island.calc_pixel_bounds(texture_size)
-
         islands = merge_overlapping_islands(islands)
 
-        rects = []
+        sizes = []
         need_flip = []
+        old_rects = []
         for uv_island in islands:
-            rect_size = uv_island.pixel_bounds.size
+            pixel_bounds = uv_island.calc_pixel_bounds()
+            rect_size = pixel_bounds.size
 
             locked = uv_island.is_any_orientation_locked()
             # Flip all rectangles to lay flat (wider than they are high)
@@ -358,12 +343,13 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
             else:
                 need_flip.append(False)
 
-            rects.append(rect_size)
+            old_rects.append(pixel_bounds)
+            sizes.append(rect_size)
 
         # Try one size smaller (but only if the texture can be divided by 2)
         # and only if we're allowed to modify the texture
         min_size = texture_size // 2 if (texture_size % 2 == 0) else texture_size
-        new_positions, needed_size = pack_rects(rects, min_size)
+        new_positions, needed_size = pack_rects(sizes, min_size)
 
         if needed_size > texture_size:
             self.report(
@@ -385,10 +371,10 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
             src_pixels = PixelArray(blender_image=texture)
             dst_pixels = PixelArray(size=texture_size)
 
-        for (new_pos, island, flip) in zip(new_positions, islands, need_flip):
+        for new_pos, old_rect, island, flip in zip(new_positions, old_rects, islands, need_flip):
             new_pos = Vector2Int(new_pos[0], new_pos[1])
-            old_pos = island.pixel_bounds.min
 
+            old_pos = old_rect.min
             # print(f"ISLAND\n{old_pos=} {texture_size=} {new_pos=} {new_size=}\n")
             offset = new_pos - old_pos
 
@@ -404,7 +390,7 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
             # regardless of whether the island was flipped
             # H is a point halfway the left side of the rect, which.. well draw it out yourself
             if flip:
-                h = island.pixel_bounds.size.y / 2
+                h = old_rect.size.y / 2
                 pivot = Vector((old_pos.x + h, old_pos.y + h))
                 flip_matrix = Matrix.Rotation(radians(90), 2).to_3x3()
                 matrix_pin_pivot(flip_matrix, pivot)
@@ -416,7 +402,7 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
 
             if modify_texture:
                 dst_pixels.copy_region_transformed(
-                    src_pixels, island.pixel_bounds, matrix
+                    src_pixels, old_rect, matrix
                 )
 
         bmesh.update_edit_mesh(obj.data)
@@ -437,7 +423,6 @@ class PIXPAINT_OT_set_uv_texel_density(bpy.types.Operator):
     bl_options = {"UNDO"}
 
     def execute(self, context):
-
         texture_size = context.scene.pixpaint_texture_size
         target_density = context.scene.pixpaint_texel_density
 
@@ -476,9 +461,9 @@ class PIXPAINT_OT_unwrap_pixel_grid(bpy.types.Operator):
         all_target_faces = [face for face in bm.faces if face.select]
 
         for quad_group, connected_non_quads in zip(*find_quad_groups(all_target_faces)):
-            print(
-                f"UNWRAPPING QUAD ISLAND with {len(quad_group)} quads and {len(connected_non_quads)} attached non-quads"
-            )
+            # print(
+            #     f"UNWRAPPING QUAD ISLAND with {len(quad_group)} quads and {len(connected_non_quads)} attached non-quads"
+            # )
 
             for face in all_target_faces:
                 face.select = False
@@ -540,7 +525,6 @@ class PIXPAINT_OT_unwrap_extend(bpy.types.Operator):
     bl_options = {"UNDO"}
 
     def execute(self, context):
-
         # bpy.ops.uv.select_split()
 
         texture_size = context.scene.pixpaint_texture_size
@@ -577,7 +561,6 @@ class PIXPAINT_OT_unwrap_basic(bpy.types.Operator):
     bl_options = {"UNDO"}
 
     def execute(self, context):
-
         # bpy.ops.uv.select_split()
 
         texture_size = context.scene.pixpaint_texture_size
@@ -641,7 +624,6 @@ class PIXPAINT_OT_unwrap_single_pixel(bpy.types.Operator):
     bl_options = {"UNDO"}
 
     def execute(self, context):
-
         # bpy.ops.uv.select_split()
 
         texture_size = context.scene.pixpaint_texture_size
@@ -746,9 +728,7 @@ class PIXPAINT_OT_uv_flip(bpy.types.Operator):
         texture = find_texture(obj)
 
         for island in islands:
-
-            island.calc_pixel_bounds(texture_size)
-            island_rect = island.pixel_bounds
+            island_rect = island.calc_pixel_bounds(texture_size)
 
             # `matrix` is the matrix used for transforming texture pixels,
             # `matrix_uv` is the matrix used for transforming uv coords
@@ -782,7 +762,6 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
     modify_texture: bpy.props.BoolProperty(default=False, name="Modify Texture")
 
     def execute(self, context):
-
         bpy.ops.ed.undo_push()
         obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
@@ -798,12 +777,10 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
         texture = find_texture(obj)
 
         for island in islands:
-
-            island.calc_pixel_bounds(texture_size)
-            island_rect = island.pixel_bounds
+            island_rect = island.calc_pixel_bounds(texture_size)
 
             matrix = Matrix.Rotation(radians(90), 2).to_3x3()
-            h = island.pixel_bounds.size.y / 2
+            h = island_rect.size.y / 2
             pivot = Vector((island_rect.min.x + h, island_rect.min.y + h))
 
             matrix_pin_pivot(matrix, pivot)
@@ -817,19 +794,19 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
             # free space is found for the rotated island.
             # but we do the TEXTURE modification afterwards, for the
             # entire transformation in one (rotate + move to free space)
-            old_pos = island.pixel_bounds.min
+            old_pos = island_rect.min
             bpy.ops.view3d.pixpaint_island_to_free_space(modify_texture=False)
-            new_pos = island.pixel_bounds.min
+            island.update_min_max()
+            new_rect = island.calc_pixel_bounds()
+            new_pos = new_rect.min
+
             offset = new_pos - old_pos
             matrix[0][2] += offset.x
             matrix[1][2] += offset.y
 
             if self.modify_texture and texture is not None:
-                
-                island.calc_info()
-                island.calc_pixel_bounds(texture_size)
                 if not texture_rect.contains(
-                    island.pixel_bounds.min, island.pixel_bounds.size
+                    new_rect.min, new_rect.size
                 ):
                     self.report(
                         {"ERROR"},
@@ -837,7 +814,6 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
                     )
                     bpy.ops.ed.undo()
                     return {"CANCELLED"}
-                
 
                 copy_texture_region_transformed(texture, island_rect, matrix)
 
@@ -864,7 +840,6 @@ class PIXPAINT_OT_island_to_random_position(bpy.types.Operator):
     y_max: bpy.props.FloatProperty(name="Y Max", default=1, min=0, max=1)
 
     def execute(self, context):
-
         bpy.ops.ed.undo_push()
         obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
@@ -882,9 +857,7 @@ class PIXPAINT_OT_island_to_random_position(bpy.types.Operator):
         islands = get_islands_from_obj(obj, True)
 
         for island in islands:
-
-            island.calc_pixel_bounds(texture_size)
-            island_rect = island.pixel_bounds
+            island_rect = island.calc_pixel_bounds(texture_size)
 
             max_x = max(min_x, max_x_bound - island_rect.size.x)
             max_y = max(min_y, max_y_bound - island_rect.size.y)
