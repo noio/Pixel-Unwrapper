@@ -4,8 +4,8 @@ from math import fabs, sqrt, radians
 
 from dataclasses import dataclass
 
-from bmesh.types import BMFace, BMEdge
-
+import bmesh
+from bmesh.types import BMFace, BMEdge, BMesh
 from mathutils import Vector, Matrix
 
 
@@ -278,6 +278,29 @@ def is_outer_edge_of_selection(edge):
     return (
         len(list(edge_face for edge_face in edge.link_faces if edge_face.select)) <= 1
     )
+
+def get_bmesh(obj) -> "BMesh":
+    """
+    Get a BMesh from the given object, will use either
+    `bmesh.from_edit_mesh` or `from_mesh`, depending on 
+    whether object is in Edit mode
+    """
+    if obj.data.is_editmode:
+        bm = bmesh.from_edit_mesh(obj.data)
+    else:
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+    return bm
+
+def update_and_free_bmesh(obj, bm:"BMesh"):
+    """
+    updates mesh data on the given object. 
+    """
+    if obj.data.is_editmode:
+        bmesh.update_edit_mesh(obj.data)
+    else:
+        bm.to_mesh(obj.data)
+        bm.free()
 
 
 def find_texture(obj, face=None, tex_layer=None):

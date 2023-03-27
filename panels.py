@@ -6,9 +6,6 @@ from .common import find_all_textures, find_texture, get_path_true_case
 from .islands import get_islands_from_obj
 
 
-
-
-
 class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
     """PixPaint UV Operations Panel"""
 
@@ -28,16 +25,25 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
         box = layout.box()
         box.label(text="Texture Setup")
 
+        can_create_texture = (
+            context.view_layer.objects.active is not None
+            and find_texture(context.view_layer.objects.active) is None
+        )
+
+        col = box.column(align=True)
+        col.enabled = can_create_texture
+        col.operator("view3d.pixpaint_create_texture")
+        col.prop(context.scene, "pixpaint_texture_size")
+
+        # row = col.row(align=True)
+        # row.operator("view3d.pixpaint_detect_texture_size", text="", icon="EYEDROPPER")
+
         col = box.column(align=True)
         row = col.row(align=True)
-        row.operator("view3d.pixpaint_detect_texture_size", text="", icon="EYEDROPPER")
-        row.prop(context.scene, "pixpaint_texture_size")
-
-        row = col.row(align=True)
-        op = row.operator("view3d.pixpaint_resize_texture", text ="Double (×2)")
+        op = row.operator("view3d.pixpaint_resize_texture", text="Double (×2)")
         op.scale = 2
-        op = row.operator("view3d.pixpaint_resize_texture", text ="Halve (÷2)")
-        op.scale = .5
+        op = row.operator("view3d.pixpaint_resize_texture", text="Halve (÷2)")
+        op.scale = 0.5
 
         col.separator()
 
@@ -46,10 +52,6 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
             "view3d.pixpaint_set_uv_texel_density", text="", icon="MOD_MESHDEFORM"
         )
         row.prop(context.scene, "pixpaint_texel_density")
-
-
-        col.separator()
-        col.operator("view3d.pixpaint_create_texture")
 
         #                     __    _    __   __          __
         # |  | |\ | |  /\  | |__)  /_\  |__) |__) | |\ | / __
@@ -106,29 +108,27 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
         fold_y.alternate = context.scene.pixpaint_fold_alternate
 
         row = box.row(align=True)
-        op = row.operator("view3d.pixpaint_uv_flip", text ="Flip X")
+        op = row.operator("view3d.pixpaint_uv_flip", text="Flip X")
         op.flip_axis = "X"
         op.modify_texture = context.scene.pixpaint_modify_texture
 
-        op = row.operator("view3d.pixpaint_uv_flip", text ="Flip Y")
+        op = row.operator("view3d.pixpaint_uv_flip", text="Flip Y")
         op.flip_axis = "Y"
         op.modify_texture = context.scene.pixpaint_modify_texture
 
-        op = row.operator("view3d.pixpaint_uv_rot_90", text ="Rot 90")
+        op = row.operator("view3d.pixpaint_uv_rot_90", text="Rot 90")
         op.modify_texture = context.scene.pixpaint_modify_texture
 
         col = box.column(align=True)
-        op = col.operator(
-            "view3d.pixpaint_island_to_free_space", icon="UV_ISLANDSEL"
-        )
+        op = col.operator("view3d.pixpaint_island_to_free_space", icon="UV_ISLANDSEL")
         op.modify_texture = context.scene.pixpaint_modify_texture
 
-        op = col.operator("view3d.pixpaint_island_to_random_position", icon="PIVOT_BOUNDBOX")
+        op = col.operator(
+            "view3d.pixpaint_island_to_random_position", icon="PIVOT_BOUNDBOX"
+        )
 
         op = col.operator("view3d.pixpaint_repack_uvs", icon="ALIGN_BOTTOM")
         op.modify_texture = context.scene.pixpaint_modify_texture
-
-        
 
 
 class PIXPAINT_PT_paint_tools(bpy.types.Panel):

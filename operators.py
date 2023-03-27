@@ -14,6 +14,35 @@ from .islands import *
 from .grids import Grid, GridBuildException, GridSnapModes
 
 
+class TextureOperator:
+    @classmethod
+    def poll_object_has_texture(cls, context):
+        obj = context.view_layer.objects.active
+        return obj is not None and find_texture(obj) is not None
+
+    def find_texture(self, context):
+        self.texture = find_texture(context.view_layer.objects.active)
+        self.texture_size = self.texture.size[0]
+
+    def error_if_texture_dirty(self):
+        if self.texture.is_dirty:
+            self.report(
+                {"ERROR"},
+                f'Please save "{self.texture.name}" first, because undo doesn\'t work for textures.',
+            )
+            return True
+        return False
+
+    def all_objects_with_texture(self, context):
+        objects = []
+        for obj in context.view_layer.objects:
+            if obj.type == "MESH":
+                obj_textures = find_all_textures(obj)
+                if self.texture in obj_textures:
+                    objects.append(obj)
+        return objects
+
+
 class PIXPAINT_OT_detect_texture_size(bpy.types.Operator):
     """Set texture size from first image on selected object"""
 
@@ -38,9 +67,11 @@ class PIXPAINT_OT_create_texture(bpy.types.Operator):
     bl_label = "Create and Link Texture"
     bl_options = {"UNDO"}
 
+    texture_size: bpy.props.IntProperty(default=64)
+
     @classmethod
     def poll(cls, context):
-        obj = bpy.context.view_layer.objects.active
+        obj = context.view_layer.objects.active
         return find_texture(obj) is None
 
     def execute(self, context):
@@ -96,7 +127,7 @@ class PIXPAINT_OT_create_texture(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_resize_texture(bpy.types.Operator):
+class PIXPAINT_OT_resize_texture(TextureOperator, bpy.types.Operator):
     """Resize Texture on Selected Object"""
 
     bl_idname = "view3d.pixpaint_resize_texture"
@@ -108,20 +139,15 @@ class PIXPAINT_OT_resize_texture(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        obj = context.view_layer.objects.active
-        return obj is not None and find_texture(obj) is not None
+        return cls.poll_object_has_texture(context)
 
     def execute(self, context):
         active_obj = context.view_layer.objects.active
-        texture = find_texture(active_obj)
-        texture_size = texture.size[0]
-        new_size = round(texture_size * self.scale)
+        self.find_texture(context)
 
-        if texture.is_dirty:
-            self.report(
-                {"ERROR"},
-                f'Please save "{texture.name}" first, because undo doesn\'t work for textures.',
-            )
+        new_size = round(self.texture_size * self.scale)
+
+        if self.error_if_texture_dirty():
             return {"CANCELLED"}
 
         if new_size < 2:
@@ -137,7 +163,7 @@ class PIXPAINT_OT_resize_texture(bpy.types.Operator):
 
         # SCALE UP THE TEXTURE AND PRESERVE THE DATA
         # WHEN SCALING DOWN, TEXTURE IS CROPPED TO BOTTOM LEFT
-        src_pixels = PixelArray(blender_image=texture)
+        src_pixels = PixelArray(blender_image=self.texture)
         dst_pixels = PixelArray(size=new_size)
 
         copy_region_size = Vector2Int(dst_pixels.width, dst_pixels.height)
@@ -145,9 +171,9 @@ class PIXPAINT_OT_resize_texture(bpy.types.Operator):
             src_pixels, Vector2Int(0, 0), copy_region_size, Vector2Int(0, 0)
         )
 
-        texture.scale(new_size, new_size)
-        texture.pixels = dst_pixels.pixels
-        texture.update()
+        self.texture.scale(new_size, new_size)
+        self.texture.pixels = dst_pixels.pixels
+        self.texture.update()
 
         # UPDATE THE UVS TO SPAN THE SAME PIXELS
         # FIND ALL OBJECTS THAT USE THE SAME TEXTURE:
@@ -155,32 +181,18 @@ class PIXPAINT_OT_resize_texture(bpy.types.Operator):
         objs_to_update_uvs = (
             [active_obj]
             if self.only_update_uvs_on_active
-            else context.view_layer.objects
+            else self.all_objects_with_texture(context)
         )
 
-        actual_scale_inv = texture_size / new_size
+        actual_scale_inv = self.texture_size / new_size
 
         for obj_to_update in objs_to_update_uvs:
-            if obj_to_update.type == "MESH":
-                obj_textures = find_all_textures(obj_to_update)
+            bm = get_bmesh(obj_to_update)
 
-                if texture in obj_textures:
-                    print(f"updating object {obj_to_update}")
-                    if obj_to_update.data.is_editmode:
-                        bm = bmesh.from_edit_mesh(obj_to_update.data)
-                    else:
-                        bm = bmesh.new()
-                        bm.from_mesh(obj_to_update.data)
+            uv_layer = bm.loops.layers.uv.verify()
+            uvs_scale(bm.faces, uv_layer, actual_scale_inv)
 
-                    uv_layer = bm.loops.layers.uv.verify()
-
-                    uvs_scale(bm.faces, uv_layer, actual_scale_inv)
-
-                    if obj_to_update.data.is_editmode:
-                        bmesh.update_edit_mesh(obj_to_update.data)
-                    else:
-                        bm.to_mesh(obj_to_update.data)
-                    bm.free()
+            update_and_free_bmesh(obj_to_update, bm)
 
         context.scene.pixpaint_texture_size = new_size
 
@@ -232,7 +244,7 @@ class PIXPAINT_OT_island_to_free_space(bpy.types.Operator):
     include_other_objects: bpy.props.BoolProperty(default=True)
 
     def execute(self, context):
-        obj = bpy.context.view_layer.objects.active
+        obj = context.view_layer.objects.active
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
 
@@ -291,7 +303,7 @@ class PIXPAINT_OT_island_to_free_space(bpy.types.Operator):
                     )
 
             uvs_pin(island.get_faces(), uv_layer)
-            
+
             island.update_min_max()
 
             # Append the moved island to all_islands,
@@ -371,7 +383,9 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
             src_pixels = PixelArray(blender_image=texture)
             dst_pixels = PixelArray(size=texture_size)
 
-        for new_pos, old_rect, island, flip in zip(new_positions, old_rects, islands, need_flip):
+        for new_pos, old_rect, island, flip in zip(
+            new_positions, old_rects, islands, need_flip
+        ):
             new_pos = Vector2Int(new_pos[0], new_pos[1])
 
             old_pos = old_rect.min
@@ -401,9 +415,7 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
             uvs_transform(faces, uv_layer, matrix_uv)
 
             if modify_texture:
-                dst_pixels.copy_region_transformed(
-                    src_pixels, old_rect, matrix
-                )
+                dst_pixels.copy_region_transformed(src_pixels, old_rect, matrix)
 
         bmesh.update_edit_mesh(obj.data)
 
@@ -805,9 +817,7 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
             matrix[1][2] += offset.y
 
             if self.modify_texture and texture is not None:
-                if not texture_rect.contains(
-                    new_rect.min, new_rect.size
-                ):
+                if not texture_rect.contains(new_rect.min, new_rect.size):
                     self.report(
                         {"ERROR"},
                         f"Not enough free space on texture to rotate island. Increase texture size or turn off 'Modify Texture'",

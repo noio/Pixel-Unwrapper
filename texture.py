@@ -88,7 +88,6 @@ class PixelArray:
         matrix = Matrix.Identity(3)
         offset = dst_pos - src_pos
         src_rect = RectInt(src_pos, src_pos + size)
-        print(f"{src_rect=}")
         matrix[0][2]=offset.x
         matrix[1][2]=offset.y
         self.copy_region_transformed(source, src_rect, matrix)
