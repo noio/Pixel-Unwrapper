@@ -332,7 +332,7 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
         need_flip = []
         old_rects = []
         for uv_island in islands:
-            pixel_bounds = uv_island.calc_pixel_bounds()
+            pixel_bounds = uv_island.calc_pixel_bounds(texture_size)
             rect_size = pixel_bounds.size
 
             locked = uv_island.is_any_orientation_locked()
@@ -797,7 +797,7 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
             old_pos = island_rect.min
             bpy.ops.view3d.pixpaint_island_to_free_space(modify_texture=False)
             island.update_min_max()
-            new_rect = island.calc_pixel_bounds()
+            new_rect = island.calc_pixel_bounds(texture_size)
             new_pos = new_rect.min
 
             offset = new_pos - old_pos
