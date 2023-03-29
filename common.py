@@ -188,10 +188,9 @@ def uvs_translate_rotate_scale(
     scale: float = 1,
 ):
     """
-    Translate, rotate, and scale all UVs in the given faces
-    Translation is performed LAST
-
-    rotation is in RADIANS
+    Translate, rotate, and scale all UVs in the given faces.
+    Translation is performed LAST.
+    Rotation is in RADIANS.
     """
     matrix = (Matrix.Rotation(rotate, 2) * scale).to_3x3()
     matrix[0][2] = translate.x
@@ -205,9 +204,7 @@ def uvs_transform(
     transformation=Matrix
 ):
     """
-    Translate, rotate, and scale all UVs in the given faces
-
-    rotation is in RADIANS
+    Transform all UV coordsin the given faces using the given matrix
     """
     for face in faces:
         for loop_uv in face.loops:

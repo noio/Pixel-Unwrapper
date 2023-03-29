@@ -52,6 +52,15 @@ def register():
         description="",
     )
 
+    uv_behaviors = (("DESTRUCTIVE", "Destructive", ""), ("PRESERVE", "Preserve Texture", ""))
+
+    bpy.types.Scene.pixpaint_uv_behavior = bpy.props.EnumProperty(
+        name="UV Change Behavior",
+        default=0,
+        description="When using UV operators, should the image be modified to preserve texturing",
+        items=uv_behaviors,
+    )
+
     bpy.types.Scene.pixpaint_modify_texture = bpy.props.BoolProperty(
         name="Modify Texture",
         default=False,
@@ -66,12 +75,9 @@ def register():
 
     bpy.types.Scene.pixpaint_fold_alternate = bpy.props.BoolProperty(
         name="Fold Alternate",
-        default=True,
-        description="Alternate directions of folded sections: like folding a letter versus cutting and stacking it",
+        default=False,
+        description="Alternate directions of folded sections in a zig-zag way. Turn off to cut and stack sections",
     )
-
-
-    
 
 
 def unregister():
