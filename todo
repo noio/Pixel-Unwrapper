@@ -87,5 +87,5 @@ MORE BUGS
  - [ ] Blender crashes when: Doubling a texture size, then attempting to "Unwrap Grid"
  - [ ] "Island to Free Space" does not preserve texture?
 
- - [ ] "Rescale to target density" should use uv island bounding box OR respect user setting, (not 2d cursor)
+ - [ ] Fold should either bring triangles along, or refuse when triangles are selected. Not leave them behind silently
  
