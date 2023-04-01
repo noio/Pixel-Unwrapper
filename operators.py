@@ -63,23 +63,6 @@ class TextureOperator:
         return objects
 
 
-class PIXPAINT_OT_detect_texture_size(bpy.types.Operator):
-    """Set texture size from first image on selected object"""
-
-    bl_idname = "view3d.pixpaint_detect_texture_size"
-    bl_label = "Detect Texture Size from Selected Object"
-    bl_options = {"UNDO"}
-
-    def execute(self, context):
-        obj = bpy.context.view_layer.objects.active
-        texture = find_texture(obj)
-
-        if texture:
-            context.scene.pixpaint_texture_size = texture.size[0]
-
-        return {"FINISHED"}
-
-
 class PIXPAINT_OT_create_texture(bpy.types.Operator):
     """Create and Link Texture"""
 
@@ -103,12 +86,12 @@ class PIXPAINT_OT_create_texture(bpy.types.Operator):
         #################################################
         new_texture = bpy.data.images.new(
             name=f"{obj.name} Texture" if is_title_case else f"{obj.name}_tex",
-            width=context.scene.pixpaint_texture_size,
-            height=context.scene.pixpaint_texture_size,
+            width=context.scene.pixpaint_new_texture_size,
+            height=context.scene.pixpaint_new_texture_size,
             alpha=True,
         )
 
-        pixels = PixelArray(None, context.scene.pixpaint_texture_size)
+        pixels = PixelArray(None, context.scene.pixpaint_new_texture_size)
         new_texture.pixels = pixels.pixels
 
         ##############################
@@ -547,7 +530,7 @@ class PIXPAINT_OT_unwrap_pixel_grid(TextureOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_unwrap_extend(bpy.types.Operator):
+class PIXPAINT_OT_unwrap_extend(TextureOperator, bpy.types.Operator):
     """Standard Blender unwrap, preserves pinned UVs and snaps to pixels depending on setting"""
 
     bl_idname = "view3d.pixpaint_unwrap_extend"
@@ -555,9 +538,7 @@ class PIXPAINT_OT_unwrap_extend(bpy.types.Operator):
     bl_options = {"UNDO"}
 
     def execute(self, context):
-        # bpy.ops.uv.select_split()
-
-        texture_size = context.scene.pixpaint_texture_size
+        self.find_texture(context)
 
         obj = bpy.context.view_layer.objects.active
         bm = bmesh.from_edit_mesh(obj.data)
@@ -574,7 +555,7 @@ class PIXPAINT_OT_unwrap_extend(bpy.types.Operator):
         selected_faces = list(face for face in bm.faces if face.select)
 
         uvs_snap_to_texel_corner(
-            selected_faces, uv_layer, texture_size, skip_pinned=True
+            selected_faces, uv_layer, self.texture_size, skip_pinned=True
         )
         uvs_pin(selected_faces, uv_layer)
 
@@ -583,7 +564,7 @@ class PIXPAINT_OT_unwrap_extend(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_unwrap_basic(bpy.types.Operator):
+class PIXPAINT_OT_unwrap_basic(TextureOperator, bpy.types.Operator):
     """Standard blender unwrap, but scales to correct pixel density"""
 
     bl_idname = "view3d.pixpaint_unwrap_basic"
@@ -591,9 +572,9 @@ class PIXPAINT_OT_unwrap_basic(bpy.types.Operator):
     bl_options = {"UNDO"}
 
     def execute(self, context):
+        self.find_texture(context)
         # bpy.ops.uv.select_split()
 
-        texture_size = context.scene.pixpaint_texture_size
         target_density = context.scene.pixpaint_texel_density
 
         obj = bpy.context.view_layer.objects.active
@@ -613,14 +594,14 @@ class PIXPAINT_OT_unwrap_basic(bpy.types.Operator):
 
         # Scale to texel density
         uvs_scale_texel_density(
-            bm, selected_faces, uv_layer, texture_size, target_density
+            bm, selected_faces, uv_layer, self.texture_size, target_density
         )
 
         # Round the total size of the island to a whole number of pixels
         island = UVIsland(selected_faces, bm, uv_layer)
         size = island.max - island.min
-        pixel_size = size * texture_size
-        rounded_size = Vector((round(pixel_size.x), round(pixel_size.y))) / texture_size
+        pixel_size = size * self.texture_size
+        rounded_size = Vector((round(pixel_size.x), round(pixel_size.y))) / self.texture_size
         scale = Vector((rounded_size.x / size.x, rounded_size.y / size.y))
         uvs_scale(selected_faces, uv_layer, scale)
 
@@ -629,10 +610,6 @@ class PIXPAINT_OT_unwrap_basic(bpy.types.Operator):
         center = 0.5 * (island.max + island.min)
         offset = rounded_size / 2 - center
         uvs_translate_rotate_scale(selected_faces, uv_layer, offset)
-
-        # uvs_snap_to_texel_corner(
-        #     selected_faces, uv_layer, texture_size, skip_pinned=True
-        # )
 
         bpy.ops.view3d.pixpaint_island_to_free_space(modify_texture=False)
 
@@ -643,7 +620,7 @@ class PIXPAINT_OT_unwrap_basic(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_unwrap_single_pixel(bpy.types.Operator):
+class PIXPAINT_OT_unwrap_single_pixel(TextureOperator, bpy.types.Operator):
     """Unwraps the selected faces to a single pixel, so they always
     have the same color when painting"""
 
@@ -652,9 +629,9 @@ class PIXPAINT_OT_unwrap_single_pixel(bpy.types.Operator):
     bl_options = {"UNDO"}
 
     def execute(self, context):
-        # bpy.ops.uv.select_split()
+        self.find_texture(context)
 
-        texture_size = context.scene.pixpaint_texture_size
+        # bpy.ops.uv.select_split()
 
         obj = bpy.context.view_layer.objects.active
         bm = bmesh.from_edit_mesh(obj.data)
@@ -671,7 +648,7 @@ class PIXPAINT_OT_unwrap_single_pixel(bpy.types.Operator):
             margin=0.01,
         )
 
-        target_size = 1.0 / texture_size
+        target_size = 1.0 / self.texture_size
 
         def vert_pos(v, v_total):
             a = pi * 2 * v / v_total
@@ -727,7 +704,7 @@ class PIXPAINT_OT_uv_grid_fold(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_uv_flip(bpy.types.Operator):
+class PIXPAINT_OT_uv_flip(TextureOperator, bpy.types.Operator):
     """Flip the selected UV Island"""
 
     bl_idname = "view3d.pixpaint_uv_flip"
@@ -743,11 +720,10 @@ class PIXPAINT_OT_uv_flip(bpy.types.Operator):
     modify_texture: bpy.props.BoolProperty(default=False, name="Modify Texture")
 
     def execute(self, context):
+        self.find_texture(context)
         obj = context.view_layer.objects.active
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
-
-        texture_size = context.scene.pixpaint_texture_size
 
         # FIND ISLANDS
         islands = get_islands_from_obj(obj, True)
@@ -756,7 +732,7 @@ class PIXPAINT_OT_uv_flip(bpy.types.Operator):
         texture = find_texture(obj)
 
         for island in islands:
-            island_rect = island.calc_pixel_bounds(texture_size)
+            island_rect = island.calc_pixel_bounds(self.texture_size)
 
             # `matrix` is the matrix used for transforming texture pixels,
             # `matrix_uv` is the matrix used for transforming uv coords
@@ -769,7 +745,7 @@ class PIXPAINT_OT_uv_flip(bpy.types.Operator):
 
             matrix_pin_pivot(matrix, pivot)
 
-            matrix_uv = get_uv_space_matrix(matrix, texture_size)
+            matrix_uv = get_uv_space_matrix(matrix, self.texture_size)
 
             uvs_transform(island.get_faces(), uv_layer, matrix_uv)
 
@@ -780,7 +756,7 @@ class PIXPAINT_OT_uv_flip(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
+class PIXPAINT_OT_uv_rot_90(TextureOperator, bpy.types.Operator):
     """Rotate the selected UV Island by 90 degrees (CCW)"""
 
     bl_idname = "view3d.pixpaint_uv_rot_90"
@@ -791,12 +767,14 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
 
     def execute(self, context):
         bpy.ops.ed.undo_push()
+        
+        self.find_texture(context)
+
         obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
 
-        texture_size = context.scene.pixpaint_texture_size
-        texture_rect = RectInt(Vector2Int(0, 0), Vector2Int(texture_size, texture_size))
+        texture_rect = RectInt(Vector2Int(0, 0), Vector2Int(self.texture_size, self.texture_size))
 
         # FIND ISLANDS
         islands = get_islands_from_obj(obj, True)
@@ -805,7 +783,7 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
         texture = find_texture(obj)
 
         for island in islands:
-            island_rect = island.calc_pixel_bounds(texture_size)
+            island_rect = island.calc_pixel_bounds(self.texture_size)
 
             matrix = Matrix.Rotation(radians(90), 2).to_3x3()
             h = island_rect.size.y / 2
@@ -813,7 +791,7 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
 
             matrix_pin_pivot(matrix, pivot)
 
-            matrix_uv = get_uv_space_matrix(matrix, texture_size)
+            matrix_uv = get_uv_space_matrix(matrix, self.texture_size)
             uvs_transform(island.get_faces(), uv_layer, matrix_uv)
 
             # When rotating, the bounds change, so we need to find some
@@ -825,7 +803,7 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
             old_pos = island_rect.min
             bpy.ops.view3d.pixpaint_island_to_free_space(modify_texture=False)
             island.update_min_max()
-            new_rect = island.calc_pixel_bounds(texture_size)
+            new_rect = island.calc_pixel_bounds(self.texture_size)
             new_pos = new_rect.min
 
             offset = new_pos - old_pos
@@ -850,7 +828,7 @@ class PIXPAINT_OT_uv_rot_90(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_island_to_random_position(bpy.types.Operator):
+class PIXPAINT_OT_island_to_random_position(TextureOperator, bpy.types.Operator):
     """Move the selected island(s) to a random position inside the UV bounds"""
 
     bl_idname = "view3d.pixpaint_island_to_random_position"
@@ -864,29 +842,32 @@ class PIXPAINT_OT_island_to_random_position(bpy.types.Operator):
 
     def execute(self, context):
         bpy.ops.ed.undo_push()
+
+        self.find_texture(context)
+
         obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
 
-        texture_size = context.scene.pixpaint_texture_size
-        min_x = floor(texture_size * self.x_min)
-        min_y = floor(texture_size * self.y_min)
+        
+        min_x = floor(self.texture_size * self.x_min)
+        min_y = floor(self.texture_size * self.y_min)
 
         # ensure no negative coords
-        max_x_bound = ceil(texture_size * self.x_max)
-        max_y_bound = ceil(texture_size * self.y_max)
+        max_x_bound = ceil(self.texture_size * self.x_max)
+        max_y_bound = ceil(self.texture_size * self.y_max)
 
         # FIND ISLANDS
         islands = get_islands_from_obj(obj, True)
 
         for island in islands:
-            island_rect = island.calc_pixel_bounds(texture_size)
+            island_rect = island.calc_pixel_bounds(self.texture_size)
 
             max_x = max(min_x, max_x_bound - island_rect.size.x)
             max_y = max(min_y, max_y_bound - island_rect.size.y)
 
-            tx = (random.randint(min_x, max_x) - island_rect.min.x) / texture_size
-            ty = (random.randint(min_y, max_y) - island_rect.min.y) / texture_size
+            tx = (random.randint(min_x, max_x) - island_rect.min.x) / self.texture_size
+            ty = (random.randint(min_y, max_y) - island_rect.min.y) / self.texture_size
 
             matrix_uv = Matrix.Translation(Vector((tx, ty, 0)))
 
