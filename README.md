@@ -2,7 +2,7 @@
     __CAN CRASH BLENDER.__  
     __USE AT YOUR OWN RISK AND SAVE REGULARLY__  
 
-    
+
 # PixPaint add-on for Blender
 
 [Overview Image: good pixel mapping vs bad]
@@ -55,7 +55,7 @@ This is the tool I use most. It detects a **grid of quads** in the selection, an
 
 ### Unwrap Extend
 
-[Example Image]
+[TODO: Example Image]
 
 ### Unwrap to Single Pixel
 
@@ -65,28 +65,28 @@ Sometimes you have a bunch of faces that you just want to fill with a color. Thi
 
 ## UV Editing
 
-Explain Modes: **Destructive** vs **Preserve Texturing**
+TODO: Explain Modes: **Destructive** vs **Preserve Texturing**
 
 ### Flip & Rotate
 
 ### Rescale Selection
 
-[Example Image]
+[TODO: Example Image]
 
 ### Selection to Free Space
 
-[Example Image]
+[TODO: Example Image]
 
 The plugin assumes that **texture size is not an issue**. Pixel art textures are so small that efficient texture space usage is not a priority. By letting the plugin loosely pack UV islands onto the texture, the workflow is made a lot more flexible. It allows you to start texture painting before finalizing the UV mapping of a model, as there's always some extra space to paint newly added geometry later. If you're creating assets for a game and are worried about GPU memory, it's best to use a packing tool as a final step in the art pipeline. I recommend [SpriteUV](https://www.spriteuv.com).
 
 
 ### Selection to Random
 
-[Example Image]
+[TODO: Example Image]
 
 ### Repack All
 
-[Example Image]
+[TODO: Example Image]
 
 
 ## Caveats
