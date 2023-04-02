@@ -39,6 +39,7 @@ If your model does not have a material with a texture yet, use this button to cr
 
 ![Unwrap Basic](docs/unwrap_basic.png)
 
+Performs a standard Blender Unwrap operation, but scales the result to the desired _Pixel Density_. Then, it will snap **only the bounds** of the UV islands to the nearest pixel. 
 
 
 ### Unwrap Grid
