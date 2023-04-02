@@ -35,6 +35,8 @@ If your model does not have a material with a texture yet, use this button to cr
 
 ## Unwrapping
 
+![Unwrapping](docs/unwrapping.png)
+
 ### Unwrap Basic
 
 ![Unwrap Basic](docs/unwrap_basic.png)
