@@ -43,16 +43,13 @@ If your model does not have a material with a texture yet, use this button to cr
 
 ![Unwrap Basic](docs/unwrap_basic.png)
 
-Performs a standard Blender Unwrap operation, but scales the result to match the Pixel Density. Then, it will scale and move the selection so that **the bounds align with pixel edges on the texture**. 
-
+Performs a standard Blender Unwrap operation, but scales the result to match the Pixel Density. Then, it will scale and move the selection so that **the bounds align with pixel edges on the texture**. Internal vertices are not snapped to pixels
 
 ### Unwrap Grid
 
 ![Unwrap Grid](docs/unwrap_grid.png)
 
-This is the tool I use most. It detects a **grid of quads** in the selection, and maps each **row and column** of that grid to the closest multiple of whole pixels (applying the Pixel Density). Any attached non-quads are unwrapped using Blender's standard unwrap.
-
-[Example Image]
+This is the tool I use most. It detects a **grid of quads** in the selection, and maps each **row and column** of that grid to the closest multiple of whole pixels (applying the Pixel Density). Any attached non-quads are unwrapped using Blender's standard unwrap. If the quads in your model are very deformed, so will the pixels. Before I wrote this plugin, I used the **Snap to Axis** operator from [UVSquares](https://www.blendermarket.com/products/uv-squares) and then scaled things manually to match the Pixel Density.
 
 ### Unwrap Extend
 
@@ -60,7 +57,9 @@ This is the tool I use most. It detects a **grid of quads** in the selection, an
 
 ### Unwrap to Single Pixel
 
-[Example Image]
+![Unwrap to Single Pixel](docs/unwrap_to_single_pixel.png)
+
+Sometimes you have a bunch of faces that you just want to fill with a single color. This operator maps those to a single pixel on the texture. Each time you apply the operator, the selection is mapped to a free bit of texture so you can fill it with a different color.
 
 ## UV Editing
 
