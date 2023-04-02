@@ -1,3 +1,8 @@
+>   __WARNING: EARLY ALPHA VERSION.__  
+    __CAN CRASH BLENDER.__  
+    __USE AT YOUR OWN RISK AND SAVE REGULARLY__  
+
+    
 # PixPaint add-on for Blender
 
 [Overview Image: good pixel mapping vs bad]
@@ -9,9 +14,6 @@ This is an add-on for Blender that helps creating **Pixel Art 3D** or **lo-fi 3D
 
 Blender's standard unwrapping tools can make this tedious. I wrote this add-on to make that easier.
 
->   __WARNING: EARLY ALPHA VERSION.__  
-    __CAN CRASH BLENDER.__  
-    __USE AT YOUR OWN RISK AND SAVE REGULARLY__  
 
 [![Walkthrough on YouTube](https://user-images.githubusercontent.com/271730/224333278-0fdfa82c-cd5d-4601-a2b8-563e29f4f493.png)](https://youtu.be/9ao1PM7GTS8)
 
@@ -59,7 +61,7 @@ This is the tool I use most. It detects a **grid of quads** in the selection, an
 
 ![Unwrap to Single Pixel](docs/unwrap_to_single_pixel.png)
 
-Sometimes you have a bunch of faces that you just want to fill with a single color. This operator maps those to a single pixel on the texture. Each time you apply the operator, the selection is mapped to a free bit of texture so you can fill it with a different color.
+Sometimes you have a bunch of faces that you just want to fill with a color. This operator maps those to a single pixel on the texture. Each time you apply the operator, the selection is mapped to a free bit of texture so you can fill it with a different color.
 
 ## UV Editing
 
