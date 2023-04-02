@@ -13,6 +13,9 @@ Blender's standard unwrapping tools can make this tedious. I wrote this add-on t
     __CAN CRASH BLENDER.__  
     __USE AT YOUR OWN RISK AND SAVE REGULARLY__  
 
+[![Walkthrough on YouTube](https://user-images.githubusercontent.com/271730/224333278-0fdfa82c-cd5d-4601-a2b8-563e29f4f493.png)](https://youtu.be/9ao1PM7GTS8)
+
+
 
 # Installation
 
@@ -20,7 +23,6 @@ Go to [Releases](https://github.com/noio/pixpaint/releases/latest) and download 
 
 # Features
 
-[![Walkthrough on YouTube](https://user-images.githubusercontent.com/271730/224333278-0fdfa82c-cd5d-4601-a2b8-563e29f4f493.png)](https://youtu.be/9ao1PM7GTS8)
 
 
 ## Pixels Per Unit
@@ -41,10 +43,14 @@ If your model does not have a material with a texture yet, use this button to cr
 
 ![Unwrap Basic](docs/unwrap_basic.png)
 
-Performs a standard Blender Unwrap operation, but scales the result to the desired _Pixel Density_. Then, it will snap **only the bounds** of the UV islands to the nearest pixel. 
+Performs a standard Blender Unwrap operation, but scales the result to match the Pixel Density. Then, it will scale and move the selection so that **the bounds align with pixel edges on the texture**. 
 
 
 ### Unwrap Grid
+
+![Unwrap Grid](docs/unwrap_grid.png)
+
+This is the tool I use most. It detects a **grid of quads** in the selection, and maps each **row and column** of that grid to the closest multiple of whole pixels (applying the Pixel Density). Any attached non-quads are unwrapped using Blender's standard unwrap.
 
 [Example Image]
 
