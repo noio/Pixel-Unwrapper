@@ -25,7 +25,7 @@ Go to [Releases](https://github.com/noio/pixpaint/releases/latest) and download 
 
 # Features
 
-
+![Texture Setup](docs/texture_setup.png)
 
 ## Pixels Per Unit
 
