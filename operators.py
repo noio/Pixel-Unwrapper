@@ -107,7 +107,7 @@ class PIXPAINT_OT_create_texture(bpy.types.Operator):
         mat = obj.active_material
 
         if mat is None:
-            name = f"{obj.name} Material" if is_title_case else "{obj.name}_mat"
+            name = f"{obj.name} Material" if is_title_case else f"{obj.name}_mat"
             mat = bpy.data.materials.new(name=name)
             obj.data.materials.append(mat)
 
@@ -217,10 +217,10 @@ class PIXPAINT_OT_swap_eraser(bpy.types.Operator):
 
 
 class PIXPAINT_OT_island_to_free_space(TextureOperator, bpy.types.Operator):
-    """Move the selected UV island(s) to a free section on the UV map"""
+    """Move the Selection to a free section on the UV map"""
 
     bl_idname = "view3d.pixpaint_island_to_free_space"
-    bl_label = "Island to Free Space"
+    bl_label = "Selection to Free Space"
     bl_options = {"UNDO"}
 
     modify_texture: bpy.props.BoolProperty(default=False)
@@ -317,7 +317,7 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
     """Repack all UV islands in the editing mesh in a more efficient way"""
 
     bl_idname = "view3d.pixpaint_repack_uvs"
-    bl_label = "Repack All Islands"
+    bl_label = "Repack All"
     bl_options = {"UNDO"}
 
     modify_texture: bpy.props.BoolProperty(default=False)
@@ -705,10 +705,10 @@ class PIXPAINT_OT_uv_grid_fold(bpy.types.Operator):
 
 
 class PIXPAINT_OT_uv_flip(TextureOperator, bpy.types.Operator):
-    """Flip the selected UV Island"""
+    """Flip the Selection"""
 
     bl_idname = "view3d.pixpaint_uv_flip"
-    bl_label = "Flip UV Island"
+    bl_label = "Flip Selected UV"
     bl_options = {"UNDO"}
 
     FlipAxis = [
@@ -757,10 +757,10 @@ class PIXPAINT_OT_uv_flip(TextureOperator, bpy.types.Operator):
 
 
 class PIXPAINT_OT_uv_rot_90(TextureOperator, bpy.types.Operator):
-    """Rotate the selected UV Island by 90 degrees (CCW)"""
+    """Rotate UVs of Selection 90 degrees (CCW)"""
 
     bl_idname = "view3d.pixpaint_uv_rot_90"
-    bl_label = "Rotate UV Island 90 Degrees"
+    bl_label = "Rotate UVs of Selection"
     bl_options = {"UNDO"}
 
     modify_texture: bpy.props.BoolProperty(default=False, name="Modify Texture")
@@ -828,11 +828,11 @@ class PIXPAINT_OT_uv_rot_90(TextureOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_island_to_random_position(TextureOperator, bpy.types.Operator):
-    """Move the selected island(s) to a random position inside the UV bounds"""
+class PIXPAINT_OT_randomize_islands(TextureOperator, bpy.types.Operator):
+    """Move the selected islands to random positions inside the UV bounds"""
 
-    bl_idname = "view3d.pixpaint_island_to_random_position"
-    bl_label = "Island to Random"
+    bl_idname = "view3d.pixpaint_randomize_islands"
+    bl_label = "Randomize Islands"
     bl_options = {"UNDO", "REGISTER"}
 
     x_min: bpy.props.FloatProperty(name="X Min", default=0, min=0, max=1)

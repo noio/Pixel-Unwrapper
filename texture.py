@@ -1,3 +1,5 @@
+import bpy
+
 from itertools import cycle, islice
 from math import ceil, floor
 from mathutils import Vector, Matrix
@@ -32,6 +34,10 @@ class PixelArray:
                 len(self.pixels) == self.width * self.height * 4
             ), "Pixels array is not the right size"
         elif size is not None:
+            col_tl = tuple(bpy.context.scene.pixpaint_texture_fill_color_tl) + (1,)
+            col_tr = tuple(bpy.context.scene.pixpaint_texture_fill_color_tr) + (1,)
+            col_bl = tuple(bpy.context.scene.pixpaint_texture_fill_color_bl) + (1,)
+            col_br = tuple(bpy.context.scene.pixpaint_texture_fill_color_br) + (1,)
             self.width = self.height = size
             pixels = list()
             for i in range(size * size):
@@ -42,17 +48,17 @@ class PixelArray:
                 light = (row + col) % 2 == 0
                 if left:
                     if top:
-                        col = [0.7, 0.3, 0.3, 1]  # RED
+                        col = col_tl
                     else:
-                        col = [0.4, 0.4, 0.8, 1]  # BLUE
+                        col = col_bl
                 else:
                     if top:
-                        col = [0.3, 0.7, 0.3, 1]  # GREEN
+                        col = col_tr
                     else:
-                        col = [1, 0.6, 0, 1]  # YELLOW
+                        col = col_br
 
                 if not light:
-                    col = [c * 0.7 for c in col]
+                    col = [c * 0.85 for c in col]
                     col[3] = 1 # Fix alpha (we don't want to multiply that one with .7)
                 pixels.extend(col)
 

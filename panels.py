@@ -26,6 +26,8 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
         box.label(text="Texture Setup")
         content = box.column()
 
+        content.prop(context.scene, "pixpaint_texel_density")
+
         has_texture = (
             context.view_layer.objects.active is not None
             and find_texture(context.view_layer.objects.active) is not None
@@ -37,7 +39,7 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
         row = content.row(align=True)
         row.enabled = can_create_texture
         row.operator("view3d.pixpaint_create_texture")
-        row.prop(context.scene, "pixpaint_texture_size",text="Size")
+        row.prop(context.scene, "pixpaint_texture_size", text="Size")
 
         # row = col.row(align=True)
         # row.operator("view3d.pixpaint_detect_texture_size", text="", icon="EYEDROPPER")
@@ -49,8 +51,14 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
         op = row.operator("view3d.pixpaint_resize_texture", text="Halve (÷2)")
         op.scale = 0.5
 
+        content.label(text="Fill Colors")
+        row = content.row(align=True)
+        row.prop(context.scene, "pixpaint_texture_fill_color_tl", text="")
+        row.prop(context.scene, "pixpaint_texture_fill_color_tr", text="")
+        row.prop(context.scene, "pixpaint_texture_fill_color_bl", text="")
+        row.prop(context.scene, "pixpaint_texture_fill_color_br", text="")
+
         # row = col.row(align=True)
-        content.prop(context.scene, "pixpaint_texel_density")
 
         #                     __    _    __   __          __
         # |  | |\ | |  /\  | |__)  /_\  |__) |__) | |\ | / __
@@ -77,17 +85,34 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
         # |__ |__/ |  |     \__/  \/  .__)
         #
         box = layout.box()
-        box.label(text="UV Editing")
-
         if bpy.context.object.mode != "EDIT":
             box.enabled = False
 
-        row = box.row()
-        prop = row.prop(context.scene, "pixpaint_uv_behavior", expand=True)
-        # prop = box.prop(context.scene, "pixpaint_modify_texture", text="Modify Texture")
-
+        header = box.row()
+        header.label(text="UV Editing")
+        header.prop(context.scene, "pixpaint_uv_behavior", text="")
+        
         preserve_texture = context.scene.pixpaint_uv_behavior == "PRESERVE"
 
+        ###################
+        # FLIP AND ROTATE #
+        ###################
+        col = box.column(align=True)
+        op = col.operator("view3d.pixpaint_uv_flip", text="Flip Horizontal")
+        op.flip_axis = "X"
+        op.modify_texture = preserve_texture
+
+        op = col.operator("view3d.pixpaint_uv_flip", text="Flip Vertical")
+        op.flip_axis = "Y"
+        op.modify_texture = preserve_texture
+
+        op = col.operator("view3d.pixpaint_uv_rot_90", text="Rotate 90° CCW")
+        op.modify_texture = preserve_texture
+
+
+        ###########
+        # FOLDING #
+        ###########
         fold_box = box.column()
         fold_box.enabled = not preserve_texture
         fold_content = fold_box.column()
@@ -107,30 +132,18 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
         fold_y.y_sections = context.scene.pixpaint_fold_sections
         fold_y.alternate = context.scene.pixpaint_fold_alternate
 
-        col = box.column(align=True)
-        op = col.operator("view3d.pixpaint_uv_flip", text="Flip Horizontal")
-        op.flip_axis = "X"
-        op.modify_texture = preserve_texture
-
-        op = col.operator("view3d.pixpaint_uv_flip", text="Flip Vertical")
-        op.flip_axis = "Y"
-        op.modify_texture = preserve_texture
-
-        op = col.operator("view3d.pixpaint_uv_rot_90", text="Rotate 90° CCW")
-        op.modify_texture = preserve_texture
-
-        col = box.column()
-
+        ######################
+        # OTHER UV OPERATORS #
+        ######################
         # These operators can NEVER preserve texturing
+        col = box.column()
         row = col.row()
         row.enabled = not preserve_texture
         op = row.operator("view3d.pixpaint_set_uv_texel_density", icon="MOD_MESHDEFORM")
 
         row = col.row()
         row.enabled = not preserve_texture
-        op = row.operator(
-            "view3d.pixpaint_island_to_random_position", icon="PIVOT_BOUNDBOX"
-        )
+        op = row.operator("view3d.pixpaint_randomize_islands", icon="PIVOT_BOUNDBOX")
 
         op = col.row().operator(
             "view3d.pixpaint_island_to_free_space", icon="UV_ISLANDSEL"

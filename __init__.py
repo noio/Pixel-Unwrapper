@@ -52,7 +52,35 @@ def register():
         description="",
     )
 
-    uv_behaviors = (("DESTRUCTIVE", "Destructive", ""), ("PRESERVE", "Preserve Texture", ""))
+    bpy.types.Scene.pixpaint_texture_fill_color_tl = bpy.props.FloatVectorProperty(
+        name="Texture Fill A",
+        default=[0.7, 0.3, 0.3],
+        description="Color used to fill top left quadrant of empty texture",
+        subtype="COLOR",
+    )
+    bpy.types.Scene.pixpaint_texture_fill_color_bl = bpy.props.FloatVectorProperty(
+        name="Texture Fill B",
+        default=[0.4, 0.4, 0.8],
+        description="Color used to fill bottom left quadrant of empty texture",
+        subtype="COLOR",
+    )
+    bpy.types.Scene.pixpaint_texture_fill_color_tr = bpy.props.FloatVectorProperty(
+        name="Texture Fill C",
+        default=[0.3, 0.7, 0.3],
+        description="Color used to fill top right quadrant of empty texture",
+        subtype="COLOR",
+    )
+    bpy.types.Scene.pixpaint_texture_fill_color_br = bpy.props.FloatVectorProperty(
+        name="Texture Fill D",
+        default=[1, 0.6, 0],
+        description="Color used to fill bottom right quadrant of empty texture",
+        subtype="COLOR",
+    )
+
+    uv_behaviors = (
+        ("DESTRUCTIVE", "Destructive", ""),
+        ("PRESERVE", "Preserve Texture", ""),
+    )
 
     bpy.types.Scene.pixpaint_uv_behavior = bpy.props.EnumProperty(
         name="UV Change Behavior",
