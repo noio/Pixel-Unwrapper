@@ -51,11 +51,11 @@ Performs a standard Blender Unwrap operation, but scales the result to match the
 
 ![Unwrap Grid](docs/unwrap_grid.png)
 
-This is the tool I use most. It detects a **grid of quads** in the selection, and maps each **row and column** of that grid to the closest multiple of whole pixels (applying the Pixel Density). Any attached non-quads are unwrapped using Blender's standard unwrap. If the quads in your model are very deformed, so will the pixels. Before I wrote this plugin, I used the **Snap to Axis** operator from [UVSquares](https://www.blendermarket.com/products/uv-squares) and then scaled things manually to match the Pixel Density.
+This is the tool I use most. It detects a **grid of quads** in the selection, and maps each **row and column** of that grid to the closest multiple of whole pixels (applying the Pixel Density). Any attached non-quads are unwrapped using Blender's standard unwrap. If the quads in your model are very deformed, the pixels will be distorted too. Before I wrote this plugin, I used the **Snap to Axis** operator from [UVSquares](https://www.blendermarket.com/products/uv-squares) and then scaled things manually to match the Pixel Density.
 
 ### Unwrap Extend
 
-[TODO: Example Image]
+Not super useful. Just unwraps unpinned faces. Basically identical to standard blender Unwrap.
 
 ### Unwrap to Single Pixel
 
@@ -65,31 +65,43 @@ Sometimes you have a bunch of faces that you just want to fill with a color. Thi
 
 ## UV Editing
 
-TODO: Explain Modes: **Destructive** vs **Preserve Texturing**
+![UV Editing](docs/uv_editing.png)
 
-### Flip & Rotate
+When doing 3D Pixel Art, it's not always clear from the beginning which details need geometry and which can be desiged as (transparent) textures. Being able to start painting a bit of texture and then go back to modelling is very helpful. To aid with that, some UV operators can be applied **while preserving the bits of texture you have already painted**.
+
+ - **Destructive** mode is the normal mode of UV editing. If you have already created a texture, it will become jumbled on the model as UV faces move. 
+ - **Preserve Texture** will attempt to **move pixels on the texture** as the operator is applied, to preserve how the texture fits on the model. Not all operators are compatible with this mode. 
+
+
+### Flip
+
+Will flip the selected faces on the UV map. It uses pixel-snapped UV bounds for the flipping, even if the vertices are not snapped to pixels.
+
+### Rotate
+
+Rotates the selected faces 90 degrees CCW on the UV map. In **Preserve Texture** mode, the island is **moved to a free bit of UV space**, so that the original texture can be copied there without overwriting any other islands.
+
+### Folding
 
 ### Rescale Selection
 
-[TODO: Example Image]
+Rescales the selection to match the Pixel Density.
 
 ### Selection to Free Space
 
-[TODO: Example Image]
+Moves the selection to a free bit of UV space. In **Preserve Texture** mode, it copies the texture pixels to the new UV location. 
 
 The plugin assumes that **texture size is not an issue**. Pixel art textures are so small that efficient texture space usage is not a priority. By letting the plugin loosely pack UV islands onto the texture, the workflow is made a lot more flexible. It allows you to start texture painting before finalizing the UV mapping of a model, as there's always some extra space to paint newly added geometry later. If you're creating assets for a game and are worried about GPU memory, it's best to use a packing tool as a final step in the art pipeline. I recommend [SpriteUV](https://www.spriteuv.com).
 
+### Randomize Islands
 
-### Selection to Random
-
-[TODO: Example Image]
+Moves each island to a random position on the UV map. This can be useful for assigning random sections of a uniform texture (tree bark, ground dirt, etc).
 
 ### Repack All
 
-[TODO: Example Image]
-
+Repacks all islands onto the bottom of the UV map. This is useful for freeing up some texture space for other operators that need it. Note that islands will be rotated to make for a tighter fit, **unless** they were rotated manually using the [Rotate](#rotate) operator.
 
 ## Caveats
 
-- Texture used on multiple objects
-- Objects with multiple textures
+ - Not all operators can deal with a single texture that is used on multiple objects. For example, [Repack](#repack-all) will not take into account faces of other objects when packing.
+ - The plugin does not distinguish between multiple materials used on the same objects. It treats all faces as if they're using the same texture when deciding what is 'free UV space'.
