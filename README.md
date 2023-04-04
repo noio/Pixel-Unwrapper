@@ -95,6 +95,8 @@ The plugin assumes that **texture size is not an issue**. Pixel art textures are
 
 ### Randomize Islands
 
+![Randomize Islands](docs/randomize_islands.png)
+
 Moves each island to a random position on the UV map. This can be useful for assigning random sections of a uniform texture (tree bark, ground dirt, etc).
 
 ### Repack All
