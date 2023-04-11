@@ -313,7 +313,7 @@ class PIXPAINT_OT_island_to_free_space(TextureOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
+class PIXPAINT_OT_repack_uvs(TextureOperator, bpy.types.Operator):
     """Repack all UV islands in the editing mesh in a more efficient way"""
 
     bl_idname = "view3d.pixpaint_repack_uvs"
@@ -324,15 +324,13 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
 
     def execute(self, context):
         obj = bpy.context.view_layer.objects.active
+
+        self.find_texture(context)
+
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
 
-        texture = find_texture(obj)
-        if texture is not None:
-            texture_size = texture.size[0]
-        else:
-            texture_size: int = context.scene.pixpaint_texture_size
-
+    
         # FIND ISLANDS
         islands = get_islands_from_obj(obj, False)
         islands = merge_overlapping_islands(islands)
@@ -341,7 +339,7 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
         need_flip = []
         old_rects = []
         for uv_island in islands:
-            pixel_bounds = uv_island.calc_pixel_bounds(texture_size)
+            pixel_bounds = uv_island.calc_pixel_bounds(self.texture_size)
             rect_size = pixel_bounds.size
 
             locked = uv_island.is_any_orientation_locked()
@@ -357,28 +355,20 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
 
         # Try one size smaller (but only if the texture can be divided by 2)
         # and only if we're allowed to modify the texture
-        min_size = texture_size // 2 if (texture_size % 2 == 0) else texture_size
+        min_size = self.texture_size // 2 if (self.texture_size % 2 == 0) else self.texture_size
         new_positions, needed_size = pack_rects(sizes, min_size)
 
-        if needed_size > texture_size:
-            self.report(
-                {"ERROR"},
-                "Texture is not big enough for UV islands. Repacking might lose data. Resize texture first.",
-            )
-            return {"CANCELLED"}
-
-        modify_texture = self.modify_texture and texture is not None
+        modify_texture = self.modify_texture and self.texture is not None
 
         if modify_texture:
-            if texture.is_dirty:
-                self.report(
-                    {"ERROR"},
-                    f'Please save "{texture.name}" first, because undo doesn\'t work for textures.',
-                )
+            if self.error_if_out_of_bounds(Vector2Int(0,0), Vector2Int(needed_size, 1)):
+                return {"CANCELLED"}
+            
+            if self.error_if_texture_dirty():
                 return {"CANCELLED"}
 
-            src_pixels = PixelArray(blender_image=texture)
-            dst_pixels = PixelArray(size=texture_size)
+            src_pixels = PixelArray(blender_image=self.texture)
+            dst_pixels = PixelArray(size=self.texture_size)
 
         for new_pos, old_rect, island, flip in zip(
             new_positions, old_rects, islands, need_flip
@@ -407,7 +397,7 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
                 matrix_pin_pivot(flip_matrix, pivot)
                 matrix = matrix @ flip_matrix
 
-            matrix_uv = get_uv_space_matrix(matrix, texture_size)
+            matrix_uv = get_uv_space_matrix(matrix, self.texture_size)
 
             uvs_transform(faces, uv_layer, matrix_uv)
 
@@ -417,8 +407,8 @@ class PIXPAINT_OT_repack_uvs(bpy.types.Operator):
         bmesh.update_edit_mesh(obj.data)
 
         if modify_texture:
-            texture.pixels = dst_pixels.pixels
-            texture.update()
+            self.texture.pixels = dst_pixels.pixels
+            self.texture.update()
 
         # texture.save()
         return {"FINISHED"}
