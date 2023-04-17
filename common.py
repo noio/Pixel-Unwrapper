@@ -305,8 +305,8 @@ def find_texture(obj, face=None, tex_layer=None):
     images = find_all_textures(obj, face, tex_layer)
     images = list(set(images))
 
-    if len(images) >= 2:
-        raise RuntimeError(f"{obj} uses two or more materials.")
+    # if len(images) >= 2:
+        # raise RuntimeError(f"{obj} uses two or more materials.")
     if not images:
         return None
 
