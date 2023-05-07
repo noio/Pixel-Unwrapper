@@ -71,9 +71,9 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
             box.enabled = False
 
         col = box.column(align=True)
-        col.operator("view3d.pixunwrap_unwrap_basic", icon="SELECT_SET")
         col.operator("view3d.pixunwrap_unwrap_pixel_grid", icon="VIEW_ORTHO")
-        col.operator("view3d.pixunwrap_unwrap_extend", icon="SELECT_SUBTRACT")
+        col.operator("view3d.pixunwrap_unwrap_basic", icon="SELECT_SET")
+        # col.operator("view3d.pixunwrap_unwrap_extend", icon="SELECT_SUBTRACT")
         col.operator("view3d.pixunwrap_unwrap_single_pixel", icon="GPBRUSH_FILL")
 
         # row = col.row()
