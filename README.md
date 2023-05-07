@@ -3,7 +3,7 @@
     __USE AT YOUR OWN RISK AND SAVE REGULARLY__  
 
 
-# PixPaint add-on for Blender
+# Pixel Perfect Unwrapping for Blender
 
 [Overview Image: good pixel mapping vs bad]
 

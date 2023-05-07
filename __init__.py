@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 bl_info = {
-    "name": "PixPaint",
+    "name": "Pixel Unwrapper",
     "author": "Thomas 'noio' van den Berg",
     "description": "",
     "blender": (2, 80, 0),
@@ -40,37 +40,37 @@ auto_load.init()
 def register():
     auto_load.register()
 
-    bpy.types.Scene.pixpaint_new_texture_size = bpy.props.IntProperty(
+    bpy.types.Scene.pixunwrap_new_texture_size = bpy.props.IntProperty(
         name="New Texture Size",
         default=64,
         description="",
     )
 
-    bpy.types.Scene.pixpaint_texel_density = bpy.props.FloatProperty(
+    bpy.types.Scene.pixunwrap_texel_density = bpy.props.FloatProperty(
         name="Pixels Per Unit",
         default=16,
         description="",
     )
 
-    bpy.types.Scene.pixpaint_texture_fill_color_tl = bpy.props.FloatVectorProperty(
+    bpy.types.Scene.pixunwrap_texture_fill_color_tl = bpy.props.FloatVectorProperty(
         name="Texture Fill A",
         default=[0.7, 0.3, 0.3],
         description="Color used to fill top left quadrant of empty texture",
         subtype="COLOR",
     )
-    bpy.types.Scene.pixpaint_texture_fill_color_bl = bpy.props.FloatVectorProperty(
+    bpy.types.Scene.pixunwrap_texture_fill_color_bl = bpy.props.FloatVectorProperty(
         name="Texture Fill B",
         default=[0.4, 0.4, 0.8],
         description="Color used to fill bottom left quadrant of empty texture",
         subtype="COLOR",
     )
-    bpy.types.Scene.pixpaint_texture_fill_color_tr = bpy.props.FloatVectorProperty(
+    bpy.types.Scene.pixunwrap_texture_fill_color_tr = bpy.props.FloatVectorProperty(
         name="Texture Fill C",
         default=[0.3, 0.7, 0.3],
         description="Color used to fill top right quadrant of empty texture",
         subtype="COLOR",
     )
-    bpy.types.Scene.pixpaint_texture_fill_color_br = bpy.props.FloatVectorProperty(
+    bpy.types.Scene.pixunwrap_texture_fill_color_br = bpy.props.FloatVectorProperty(
         name="Texture Fill D",
         default=[1, 0.6, 0],
         description="Color used to fill bottom right quadrant of empty texture",
@@ -82,26 +82,26 @@ def register():
         ("PRESERVE", "Preserve Texture", ""),
     )
 
-    bpy.types.Scene.pixpaint_uv_behavior = bpy.props.EnumProperty(
+    bpy.types.Scene.pixunwrap_uv_behavior = bpy.props.EnumProperty(
         name="UV Change Behavior",
         default=0,
         description="When using UV operators, should the image be modified to preserve texturing",
         items=uv_behaviors,
     )
 
-    bpy.types.Scene.pixpaint_modify_texture = bpy.props.BoolProperty(
+    bpy.types.Scene.pixunwrap_modify_texture = bpy.props.BoolProperty(
         name="Modify Texture",
         default=False,
         description="Should the texture be modified to keep painted pixels in place on the model, or can UV's be moved freely.",
     )
 
-    bpy.types.Scene.pixpaint_fold_sections = bpy.props.IntProperty(
+    bpy.types.Scene.pixunwrap_fold_sections = bpy.props.IntProperty(
         name="Fold Sections",
         default=2,
         description="How many sections to fold the selected UV grid into.",
     )
 
-    bpy.types.Scene.pixpaint_fold_alternate = bpy.props.BoolProperty(
+    bpy.types.Scene.pixunwrap_fold_alternate = bpy.props.BoolProperty(
         name="Fold Alternate",
         default=False,
         description="Alternate directions of folded sections in a zig-zag way. Turn off to cut and stack sections",

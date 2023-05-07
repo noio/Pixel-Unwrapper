@@ -63,10 +63,10 @@ class TextureOperator:
         return objects
 
 
-class PIXPAINT_OT_create_texture(bpy.types.Operator):
+class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
     """Create and Link Texture"""
 
-    bl_idname = "view3d.pixpaint_create_texture"
+    bl_idname = "view3d.pixunwrap_create_texture"
     bl_label = "Create Texture"
     bl_options = {"UNDO"}
 
@@ -86,12 +86,12 @@ class PIXPAINT_OT_create_texture(bpy.types.Operator):
         #################################################
         new_texture = bpy.data.images.new(
             name=f"{obj.name} Texture" if is_title_case else f"{obj.name}_tex",
-            width=context.scene.pixpaint_new_texture_size,
-            height=context.scene.pixpaint_new_texture_size,
+            width=context.scene.pixunwrap_new_texture_size,
+            height=context.scene.pixunwrap_new_texture_size,
             alpha=True,
         )
 
-        pixels = PixelArray(None, context.scene.pixpaint_new_texture_size)
+        pixels = PixelArray(None, context.scene.pixunwrap_new_texture_size)
         new_texture.pixels = pixels.pixels
 
         ##############################
@@ -130,10 +130,10 @@ class PIXPAINT_OT_create_texture(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_resize_texture(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_resize_texture(TextureOperator, bpy.types.Operator):
     """Resize Texture on Selected Object"""
 
-    bl_idname = "view3d.pixpaint_resize_texture"
+    bl_idname = "view3d.pixunwrap_resize_texture"
     bl_label = "Resize Texture"
     bl_options = {"UNDO"}
 
@@ -192,15 +192,15 @@ class PIXPAINT_OT_resize_texture(TextureOperator, bpy.types.Operator):
 
             update_and_free_bmesh(obj_to_update, bm)
 
-        context.scene.pixpaint_texture_size = new_size
+        context.scene.pixunwrap_texture_size = new_size
 
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_swap_eraser(bpy.types.Operator):
+class PIXUNWRAP_OT_swap_eraser(bpy.types.Operator):
     """Swap Eraser"""
 
-    bl_idname = "view3d.pixpaint_swap_eraser"
+    bl_idname = "view3d.pixunwrap_swap_eraser"
     bl_label = "Toggle Erase Alpha"
     bl_options = {"UNDO"}
 
@@ -216,10 +216,10 @@ class PIXPAINT_OT_swap_eraser(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_island_to_free_space(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_island_to_free_space(TextureOperator, bpy.types.Operator):
     """Move the Selection to a free section on the UV map"""
 
-    bl_idname = "view3d.pixpaint_island_to_free_space"
+    bl_idname = "view3d.pixunwrap_island_to_free_space"
     bl_label = "Selection to Free Space"
     bl_options = {"UNDO"}
 
@@ -313,10 +313,10 @@ class PIXPAINT_OT_island_to_free_space(TextureOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_repack_uvs(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_repack_uvs(TextureOperator, bpy.types.Operator):
     """Repack all UV islands in the editing mesh in a more efficient way"""
 
-    bl_idname = "view3d.pixpaint_repack_uvs"
+    bl_idname = "view3d.pixunwrap_repack_uvs"
     bl_label = "Repack All"
     bl_options = {"UNDO"}
 
@@ -414,10 +414,10 @@ class PIXPAINT_OT_repack_uvs(TextureOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_set_uv_texel_density(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_set_uv_texel_density(TextureOperator, bpy.types.Operator):
     """Scale selected UV Islands to match the selected target density (Pixels Per Unit)"""
 
-    bl_idname = "view3d.pixpaint_set_uv_texel_density"
+    bl_idname = "view3d.pixunwrap_set_uv_texel_density"
     bl_label = "Rescale Selection"
     bl_options = {"UNDO"}
 
@@ -427,7 +427,7 @@ class PIXPAINT_OT_set_uv_texel_density(TextureOperator, bpy.types.Operator):
 
         print(f"Preserve texture: {self.preserve_texture=}")
 
-        target_density = context.scene.pixpaint_texel_density
+        target_density = context.scene.pixunwrap_texel_density
 
         obj = bpy.context.view_layer.objects.active
         bm = bmesh.from_edit_mesh(obj.data)
@@ -442,10 +442,10 @@ class PIXPAINT_OT_set_uv_texel_density(TextureOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_unwrap_pixel_grid(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_unwrap_pixel_grid(TextureOperator, bpy.types.Operator):
     """Unwrap Pixel Rect"""
 
-    bl_idname = "view3d.pixpaint_unwrap_pixel_grid"
+    bl_idname = "view3d.pixunwrap_unwrap_pixel_grid"
     bl_label = "Unwrap Grid"
     bl_options = {"REGISTER", "UNDO"}
 
@@ -455,7 +455,7 @@ class PIXPAINT_OT_unwrap_pixel_grid(TextureOperator, bpy.types.Operator):
         # bpy.ops.uv.select_split()
         self.find_texture(context)
 
-        target_density = context.scene.pixpaint_texel_density
+        target_density = context.scene.pixunwrap_texel_density
 
         obj = bpy.context.view_layer.objects.active
         bm = bmesh.from_edit_mesh(obj.data)
@@ -509,7 +509,7 @@ class PIXPAINT_OT_unwrap_pixel_grid(TextureOperator, bpy.types.Operator):
             # )
             uvs_pin(connected_non_quads, uv_layer)
 
-            bpy.ops.view3d.pixpaint_island_to_free_space(modify_texture=False)
+            bpy.ops.view3d.pixunwrap_island_to_free_space(modify_texture=False)
 
         # Wrap things up: Reselect all faces (because we messed with selections)
         for face in all_target_faces:
@@ -520,10 +520,10 @@ class PIXPAINT_OT_unwrap_pixel_grid(TextureOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_unwrap_extend(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_unwrap_extend(TextureOperator, bpy.types.Operator):
     """Standard Blender unwrap, preserves pinned UVs and snaps to pixels depending on setting"""
 
-    bl_idname = "view3d.pixpaint_unwrap_extend"
+    bl_idname = "view3d.pixunwrap_unwrap_extend"
     bl_label = "Unwrap Extend"
     bl_options = {"UNDO"}
 
@@ -554,10 +554,10 @@ class PIXPAINT_OT_unwrap_extend(TextureOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_unwrap_basic(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_unwrap_basic(TextureOperator, bpy.types.Operator):
     """Standard blender unwrap, but scales to correct pixel density"""
 
-    bl_idname = "view3d.pixpaint_unwrap_basic"
+    bl_idname = "view3d.pixunwrap_unwrap_basic"
     bl_label = "Unwrap Basic"
     bl_options = {"UNDO"}
 
@@ -565,7 +565,7 @@ class PIXPAINT_OT_unwrap_basic(TextureOperator, bpy.types.Operator):
         self.find_texture(context)
         # bpy.ops.uv.select_split()
 
-        target_density = context.scene.pixpaint_texel_density
+        target_density = context.scene.pixunwrap_texel_density
 
         obj = bpy.context.view_layer.objects.active
         bm = bmesh.from_edit_mesh(obj.data)
@@ -601,7 +601,7 @@ class PIXPAINT_OT_unwrap_basic(TextureOperator, bpy.types.Operator):
         offset = rounded_size / 2 - center
         uvs_translate_rotate_scale(selected_faces, uv_layer, offset)
 
-        bpy.ops.view3d.pixpaint_island_to_free_space(modify_texture=False)
+        bpy.ops.view3d.pixunwrap_island_to_free_space(modify_texture=False)
 
         uvs_pin(selected_faces, uv_layer)
 
@@ -610,11 +610,11 @@ class PIXPAINT_OT_unwrap_basic(TextureOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_unwrap_single_pixel(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_unwrap_single_pixel(TextureOperator, bpy.types.Operator):
     """Unwraps the selected faces to a single pixel, so they always
     have the same color when painting"""
 
-    bl_idname = "view3d.pixpaint_unwrap_single_pixel"
+    bl_idname = "view3d.pixunwrap_unwrap_single_pixel"
     bl_label = "Unwrap to Single Pixel"
     bl_options = {"UNDO"}
 
@@ -658,15 +658,15 @@ class PIXPAINT_OT_unwrap_single_pixel(TextureOperator, bpy.types.Operator):
 
         bmesh.update_edit_mesh(obj.data)
 
-        bpy.ops.view3d.pixpaint_island_to_free_space(modify_texture=False)
+        bpy.ops.view3d.pixunwrap_island_to_free_space(modify_texture=False)
 
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_uv_grid_fold(bpy.types.Operator):
+class PIXUNWRAP_OT_uv_grid_fold(bpy.types.Operator):
     """Fold the selected UV grid"""
 
-    bl_idname = "view3d.pixpaint_uv_grid_fold"
+    bl_idname = "view3d.pixunwrap_uv_grid_fold"
     bl_label = "Fold UV Grid"
     bl_options = {"REGISTER", "UNDO"}
 
@@ -694,10 +694,10 @@ class PIXPAINT_OT_uv_grid_fold(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_uv_flip(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_uv_flip(TextureOperator, bpy.types.Operator):
     """Flip the Selection"""
 
-    bl_idname = "view3d.pixpaint_uv_flip"
+    bl_idname = "view3d.pixunwrap_uv_flip"
     bl_label = "Flip Selected UV"
     bl_options = {"UNDO"}
 
@@ -746,10 +746,10 @@ class PIXPAINT_OT_uv_flip(TextureOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_uv_rot_90(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_uv_rot_90(TextureOperator, bpy.types.Operator):
     """Rotate UVs of Selection 90 degrees (CCW)"""
 
-    bl_idname = "view3d.pixpaint_uv_rot_90"
+    bl_idname = "view3d.pixunwrap_uv_rot_90"
     bl_label = "Rotate UVs of Selection"
     bl_options = {"UNDO"}
 
@@ -791,7 +791,7 @@ class PIXPAINT_OT_uv_rot_90(TextureOperator, bpy.types.Operator):
             # but we do the TEXTURE modification afterwards, for the
             # entire transformation in one (rotate + move to free space)
             old_pos = island_rect.min
-            bpy.ops.view3d.pixpaint_island_to_free_space(modify_texture=False)
+            bpy.ops.view3d.pixunwrap_island_to_free_space(modify_texture=False)
             island.update_min_max()
             new_rect = island.calc_pixel_bounds(self.texture_size)
             new_pos = new_rect.min
@@ -818,10 +818,10 @@ class PIXPAINT_OT_uv_rot_90(TextureOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXPAINT_OT_randomize_islands(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_randomize_islands(TextureOperator, bpy.types.Operator):
     """Move the selected islands to random positions inside the UV bounds"""
 
-    bl_idname = "view3d.pixpaint_randomize_islands"
+    bl_idname = "view3d.pixunwrap_randomize_islands"
     bl_label = "Randomize Islands"
     bl_options = {"UNDO", "REGISTER"}
 

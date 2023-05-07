@@ -6,13 +6,13 @@ from .common import find_all_textures, find_texture, get_path_true_case
 from .islands import get_islands_from_obj
 
 
-class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
-    """PixPaint UV Operations Panel"""
+class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
+    """Pixel Unwrapper UV Operations Panel"""
 
-    bl_label = "PixPaint: UV Tools"
+    bl_label = "Pixel Unwrapper: UV Tools"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "PixPaint"
+    bl_category = "Pixel Unwrapper"
 
     def draw(self, context):
         # addon_prefs = prefs()
@@ -26,7 +26,7 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
         box.label(text="Texture Setup")
         content = box.column()
 
-        content.prop(context.scene, "pixpaint_texel_density")
+        content.prop(context.scene, "pixunwrap_texel_density")
 
         has_texture = (
             context.view_layer.objects.active is not None
@@ -38,25 +38,25 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
 
         row = content.row(align=True)
         row.enabled = can_create_texture
-        row.operator("view3d.pixpaint_create_texture")
-        row.prop(context.scene, "pixpaint_texture_size", text="Size")
+        row.operator("view3d.pixunwrap_create_texture")
+        row.prop(context.scene, "pixunwrap_texture_size", text="Size")
 
         # row = col.row(align=True)
-        # row.operator("view3d.pixpaint_detect_texture_size", text="", icon="EYEDROPPER")
+        # row.operator("view3d.pixunwrap_detect_texture_size", text="", icon="EYEDROPPER")
 
         row = content.row(align=True)
         row.enabled = has_texture
-        op = row.operator("view3d.pixpaint_resize_texture", text="Double (×2)")
+        op = row.operator("view3d.pixunwrap_resize_texture", text="Double (×2)")
         op.scale = 2
-        op = row.operator("view3d.pixpaint_resize_texture", text="Halve (÷2)")
+        op = row.operator("view3d.pixunwrap_resize_texture", text="Halve (÷2)")
         op.scale = 0.5
 
         content.label(text="Fill Colors")
         row = content.row(align=True)
-        row.prop(context.scene, "pixpaint_texture_fill_color_tl", text="")
-        row.prop(context.scene, "pixpaint_texture_fill_color_tr", text="")
-        row.prop(context.scene, "pixpaint_texture_fill_color_bl", text="")
-        row.prop(context.scene, "pixpaint_texture_fill_color_br", text="")
+        row.prop(context.scene, "pixunwrap_texture_fill_color_tl", text="")
+        row.prop(context.scene, "pixunwrap_texture_fill_color_tr", text="")
+        row.prop(context.scene, "pixunwrap_texture_fill_color_bl", text="")
+        row.prop(context.scene, "pixunwrap_texture_fill_color_br", text="")
 
         # row = col.row(align=True)
 
@@ -71,14 +71,14 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
             box.enabled = False
 
         col = box.column(align=True)
-        col.operator("view3d.pixpaint_unwrap_basic", icon="SELECT_SET")
-        col.operator("view3d.pixpaint_unwrap_pixel_grid", icon="VIEW_ORTHO")
-        col.operator("view3d.pixpaint_unwrap_extend", icon="SELECT_SUBTRACT")
-        col.operator("view3d.pixpaint_unwrap_single_pixel", icon="GPBRUSH_FILL")
+        col.operator("view3d.pixunwrap_unwrap_basic", icon="SELECT_SET")
+        col.operator("view3d.pixunwrap_unwrap_pixel_grid", icon="VIEW_ORTHO")
+        col.operator("view3d.pixunwrap_unwrap_extend", icon="SELECT_SUBTRACT")
+        col.operator("view3d.pixunwrap_unwrap_single_pixel", icon="GPBRUSH_FILL")
 
         # row = col.row()
-        # row.operator("view3d.pixpaint_unwrap_single_pixel", icon="COPYDOWN")
-        # row.operator("view3d.pixpaint_unwrap_single_pixel", icon="PASTEDOWN")
+        # row.operator("view3d.pixunwrap_unwrap_single_pixel", icon="COPYDOWN")
+        # row.operator("view3d.pixunwrap_unwrap_single_pixel", icon="PASTEDOWN")
 
         #  __  __    ___               __
         # |__ |  \ |  |     |  | \  / (__'
@@ -90,23 +90,23 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
 
         header = box.row()
         header.label(text="UV Editing")
-        header.prop(context.scene, "pixpaint_uv_behavior", text="")
+        header.prop(context.scene, "pixunwrap_uv_behavior", text="")
         
-        preserve_texture = context.scene.pixpaint_uv_behavior == "PRESERVE"
+        preserve_texture = context.scene.pixunwrap_uv_behavior == "PRESERVE"
 
         ###################
         # FLIP AND ROTATE #
         ###################
         col = box.column(align=True)
-        op = col.operator("view3d.pixpaint_uv_flip", text="Flip Horizontal")
+        op = col.operator("view3d.pixunwrap_uv_flip", text="Flip Horizontal")
         op.flip_axis = "X"
         op.modify_texture = preserve_texture
 
-        op = col.operator("view3d.pixpaint_uv_flip", text="Flip Vertical")
+        op = col.operator("view3d.pixunwrap_uv_flip", text="Flip Vertical")
         op.flip_axis = "Y"
         op.modify_texture = preserve_texture
 
-        op = col.operator("view3d.pixpaint_uv_rot_90", text="Rotate 90° CCW")
+        op = col.operator("view3d.pixunwrap_uv_rot_90", text="Rotate 90° CCW")
         op.modify_texture = preserve_texture
 
 
@@ -117,20 +117,20 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
         fold_box.enabled = not preserve_texture
         fold_content = fold_box.column()
         row = fold_content.row()
-        row.prop(context.scene, "pixpaint_fold_sections", text="Folds")
-        row.prop(context.scene, "pixpaint_fold_alternate", text="Mirror")
+        row.prop(context.scene, "pixunwrap_fold_sections", text="Folds")
+        row.prop(context.scene, "pixunwrap_fold_alternate", text="Mirror")
         # fold_content.separator()
         row = fold_content.row(align=True)
 
-        fold_x = row.operator("view3d.pixpaint_uv_grid_fold", text="Fold X")
-        fold_x.x_sections = context.scene.pixpaint_fold_sections
+        fold_x = row.operator("view3d.pixunwrap_uv_grid_fold", text="Fold X")
+        fold_x.x_sections = context.scene.pixunwrap_fold_sections
         fold_x.y_sections = 1
-        fold_x.alternate = context.scene.pixpaint_fold_alternate
+        fold_x.alternate = context.scene.pixunwrap_fold_alternate
 
-        fold_y = row.operator("view3d.pixpaint_uv_grid_fold", text="Fold Y")
+        fold_y = row.operator("view3d.pixunwrap_uv_grid_fold", text="Fold Y")
         fold_y.x_sections = 1
-        fold_y.y_sections = context.scene.pixpaint_fold_sections
-        fold_y.alternate = context.scene.pixpaint_fold_alternate
+        fold_y.y_sections = context.scene.pixunwrap_fold_sections
+        fold_y.alternate = context.scene.pixunwrap_fold_alternate
 
         ######################
         # OTHER UV OPERATORS #
@@ -139,28 +139,28 @@ class PIXPAINT_PT_pixpaint_uv_tools(bpy.types.Panel):
         col = box.column()
         row = col.row()
         row.enabled = not preserve_texture
-        op = row.operator("view3d.pixpaint_set_uv_texel_density", icon="MOD_MESHDEFORM")
+        op = row.operator("view3d.pixunwrap_set_uv_texel_density", icon="MOD_MESHDEFORM")
 
         row = col.row()
         row.enabled = not preserve_texture
-        op = row.operator("view3d.pixpaint_randomize_islands", icon="PIVOT_BOUNDBOX")
+        op = row.operator("view3d.pixunwrap_randomize_islands", icon="PIVOT_BOUNDBOX")
 
         op = col.row().operator(
-            "view3d.pixpaint_island_to_free_space", icon="UV_ISLANDSEL"
+            "view3d.pixunwrap_island_to_free_space", icon="UV_ISLANDSEL"
         )
         op.modify_texture = preserve_texture
 
-        op = col.row().operator("view3d.pixpaint_repack_uvs", icon="ALIGN_BOTTOM")
+        op = col.row().operator("view3d.pixunwrap_repack_uvs", icon="ALIGN_BOTTOM")
         op.modify_texture = preserve_texture
 
 
-class PIXPAINT_PT_paint_tools(bpy.types.Panel):
-    """PixPaint Texture Painting Panel"""
+class PIXUNWRAP_PT_paint_tools(bpy.types.Panel):
+    """Pixel Unwrapper Texture Painting Panel"""
 
-    bl_label = "PixPaint: Paint Tools"
+    bl_label = "Pixel Unwrapper: Paint Tools"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "PixPaint"
+    bl_category = "Pixel Unwrapper"
 
     def draw(self, context):
         # addon_prefs = prefs()
@@ -173,4 +173,4 @@ class PIXPAINT_PT_paint_tools(bpy.types.Panel):
         if bpy.context.object is None or bpy.context.object.mode != "TEXTURE_PAINT":
             box.enabled = False
 
-        col.operator("view3d.pixpaint_swap_eraser", icon="GPBRUSH_ERASE_HARD")
+        col.operator("view3d.pixunwrap_swap_eraser", icon="GPBRUSH_ERASE_HARD")

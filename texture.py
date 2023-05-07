@@ -34,10 +34,10 @@ class PixelArray:
                 len(self.pixels) == self.width * self.height * 4
             ), "Pixels array is not the right size"
         elif size is not None:
-            col_tl = tuple(bpy.context.scene.pixpaint_texture_fill_color_tl) + (1,)
-            col_tr = tuple(bpy.context.scene.pixpaint_texture_fill_color_tr) + (1,)
-            col_bl = tuple(bpy.context.scene.pixpaint_texture_fill_color_bl) + (1,)
-            col_br = tuple(bpy.context.scene.pixpaint_texture_fill_color_br) + (1,)
+            col_tl = tuple(bpy.context.scene.pixunwrap_texture_fill_color_tl) + (1,)
+            col_tr = tuple(bpy.context.scene.pixunwrap_texture_fill_color_tr) + (1,)
+            col_bl = tuple(bpy.context.scene.pixunwrap_texture_fill_color_bl) + (1,)
+            col_br = tuple(bpy.context.scene.pixunwrap_texture_fill_color_br) + (1,)
             self.width = self.height = size
             pixels = list()
             for i in range(size * size):
