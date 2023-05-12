@@ -58,7 +58,7 @@ class PixelArray:
                         col = col_br
 
                 if not light:
-                    col = [c * 0.85 for c in col]
+                    col = [c * 0.92 for c in col]
                     col[3] = 1 # Fix alpha (we don't want to multiply that one with .7)
                 pixels.extend(col)
 
