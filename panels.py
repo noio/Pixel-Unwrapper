@@ -39,7 +39,7 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         row = content.row(align=True)
         row.enabled = can_create_texture
         row.operator("view3d.pixunwrap_create_texture")
-        row.prop(context.scene, "pixunwrap_texture_size", text="Size")
+        row.prop(context.scene, "pixunwrap_new_texture_size", text="Size")
 
         # row = col.row(align=True)
         # row.operator("view3d.pixunwrap_detect_texture_size", text="", icon="EYEDROPPER")

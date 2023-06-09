@@ -243,8 +243,9 @@ def uvs_scale_texel_density(bm, faces, uv_layer, texture_size, target_density):
     uv_face_area *= texture_size * texture_size
 
     current_density = sqrt(uv_face_area) / sqrt(mesh_face_area)
-    scaling = target_density / current_density
-    uvs_translate_rotate_scale(faces, uv_layer, scale=scaling)
+    scale = target_density / current_density
+    uvs_translate_rotate_scale(faces, uv_layer, scale=scale)
+    return (current_density, scale)
 
 
 def uvs_pin(faces, uv_layer, pin=True):

@@ -192,8 +192,6 @@ class PIXUNWRAP_OT_resize_texture(TextureOperator, bpy.types.Operator):
 
             update_and_free_bmesh(obj_to_update, bm)
 
-        context.scene.pixunwrap_texture_size = new_size
-
         return {"FINISHED"}
 
 
@@ -435,7 +433,8 @@ class PIXUNWRAP_OT_set_uv_texel_density(TextureOperator, bpy.types.Operator):
 
         faces = [face for face in bm.faces if face.select]
 
-        uvs_scale_texel_density(bm, faces, uv_layer, self.texture_size, target_density)
+        (current_density, scale) = uvs_scale_texel_density(bm, faces, uv_layer, self.texture_size, target_density)
+        self.report({'INFO'}, f"Current: {current_density:.1f} PPU. Target: {target_density:.1f} PPU. Scale: {scale:.4f}")
 
         bmesh.update_edit_mesh(obj.data)
 
@@ -641,11 +640,15 @@ class PIXUNWRAP_OT_unwrap_single_pixel(TextureOperator, bpy.types.Operator):
         target_size = 1.0 / self.texture_size
 
         def vert_pos(v, v_total):
-            a = pi * 2 * v / v_total
-            # radius is slightly bigger than a pixel to make sure that they take
-            # up more than a pixel, and have some margin for bleed from other islands..
-            # I think.
-            radius = 0.49
+            # a = pi * 2 * v / v_total
+            
+            f = floor(v * 4 / v_total) / 4.0
+            print(f)
+            # Start at 45 degrees
+            a = pi * 2 * (f + .125)
+
+            # radius = 0.49
+            radius = sqrt(.51)
             return Vector((radius * cos(a) + 0.5, radius * sin(a) + 0.5))
 
         for face in selected_faces:
