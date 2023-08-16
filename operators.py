@@ -266,6 +266,7 @@ class PIXUNWRAP_OT_island_to_free_space(TextureOperator, bpy.types.Operator):
         if self.include_other_objects:
             for other in self.all_objects_with_texture(context):
                 if other != obj:  # Exclude this
+                    # print(f"Adding islands from {other}")
                     all_islands.extend(get_islands_from_obj(other, False))
 
         if self.ignore_unpinned_islands:
@@ -647,8 +648,10 @@ class PIXUNWRAP_OT_unwrap_single_pixel(TextureOperator, bpy.types.Operator):
             # Start at 45 degrees
             a = pi * 2 * (f + .125)
 
-            # radius = 0.49
-            radius = sqrt(.51)
+            # Make the island ALMOST fill the texture pixel,
+            # when moving with snapping on, this will actually snap
+            # to pixel corners, so then we still need bleed on the texture, but eh.
+            radius = sqrt(.49)
             return Vector((radius * cos(a) + 0.5, radius * sin(a) + 0.5))
 
         for face in selected_faces:
@@ -868,3 +871,32 @@ class PIXUNWRAP_OT_randomize_islands(TextureOperator, bpy.types.Operator):
 
         bmesh.update_edit_mesh(obj.data)
         return {"FINISHED"}
+
+
+class PIXUNWRAP_OT_object_info(bpy.types.Operator):
+    """Show Selected Object's Texture Info"""
+
+    bl_idname = "view3d.pixunwrap_object_info"
+    bl_label = "Object Info"
+
+
+    def execute(self, context):
+        active_obj = context.view_layer.objects.active
+        textures = find_all_textures(active_obj)
+        textures = list(set(textures))
+
+        objects_sharing_texture = []
+        for tex in textures:
+            for obj in context.view_layer.objects:
+                if obj.type == "MESH":
+                    obj_textures = find_all_textures(obj)
+                    if tex in obj_textures:
+                        objects_sharing_texture.append(obj)
+            
+        tex_names = ", ".join(tex.name for tex in textures)
+        obj_names = ", ".join(ob.name for ob in objects_sharing_texture)
+        self.report({"INFO"}, f"Used textures: [{tex_names}] Other objects: [{obj_names}]")
+
+
+        return {"FINISHED"}
+

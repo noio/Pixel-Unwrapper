@@ -23,10 +23,11 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         # .__) |__  |  \__/ |
         #
         box = layout.box()
-        box.label(text="Texture Setup")
+        header = box.row()
+        header.label(text="Texture Setup")
+        header.operator("view3d.pixunwrap_object_info", text="", icon="QUESTION")
+        
         content = box.column()
-
-        content.prop(context.scene, "pixunwrap_texel_density")
 
         has_texture = (
             context.view_layer.objects.active is not None
@@ -36,10 +37,13 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
             context.view_layer.objects.active is not None and not has_texture
         )
 
-        row = content.row(align=True)
-        row.enabled = can_create_texture
-        row.operator("view3d.pixunwrap_create_texture")
-        row.prop(context.scene, "pixunwrap_new_texture_size", text="Size")
+        col = content.column(align=True)
+        col.enabled = can_create_texture
+        col.operator("view3d.pixunwrap_create_texture")
+        col.prop(context.scene, "pixunwrap_new_texture_size", text="Size")
+
+        content.prop(context.scene, "pixunwrap_texel_density")
+
 
         # row = col.row(align=True)
         # row.operator("view3d.pixunwrap_detect_texture_size", text="", icon="EYEDROPPER")
@@ -57,6 +61,8 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         row.prop(context.scene, "pixunwrap_texture_fill_color_tr", text="")
         row.prop(context.scene, "pixunwrap_texture_fill_color_bl", text="")
         row.prop(context.scene, "pixunwrap_texture_fill_color_br", text="")
+
+        
 
         # row = col.row(align=True)
 

@@ -88,4 +88,9 @@ MORE BUGS
  - [ ] "Island to Free Space" does not preserve texture?
 
  - [ ] Fold should either bring triangles along, or refuse when triangles are selected. Not leave them behind silently
+
+ - [x] Single Pixel Unwrap is broken? Makes the island a tad too big? Should be smaller than 1px
+ - [x] Move "CREATE TEXTURE" button up and make bigger
+ - [ ] Create button to toggle "Snap to pixel corners" on UV
+ - [x] Info button that shows texture usage. My texture is "full" but I don't see why!
  
