@@ -64,7 +64,7 @@ class TextureOperator:
 
 
 class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
-    """Create and Link Texture"""
+    """Create and Link Texture for Selected Object"""
 
     bl_idname = "view3d.pixunwrap_create_texture"
     bl_label = "Create Texture"
@@ -76,23 +76,30 @@ class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
     def poll(cls, context):
         obj = context.view_layer.objects.active
         return find_texture(obj) is None
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+    def draw(self, context):
+        row = self.layout
+        row.prop(self, "texture_size", text="Texture Size")
 
     def execute(self, context):
         obj = bpy.context.view_layer.objects.active
-        is_title_case = " " in obj.name or any(letter.isupper() for letter in obj.name)
 
         #################################################
         # CREATE NEW TEXTURE AND FILL WITH DEFAULT GRID #
         #################################################
         new_texture = bpy.data.images.new(
-            name=f"{obj.name} Texture" if is_title_case else f"{obj.name}_tex",
-            width=context.scene.pixunwrap_new_texture_size,
-            height=context.scene.pixunwrap_new_texture_size,
+            name=get_texture_name(obj),
+            width=self.texture_size,
+            height=self.texture_size,
             alpha=True,
         )
 
-        pixels = PixelArray(None, context.scene.pixunwrap_new_texture_size)
+        pixels = PixelArray(None, self.texture_size)
         new_texture.pixels = pixels.pixels
+    
 
         ##############################
         # SET UV EDITOR TO NEW IMAGE #
@@ -107,7 +114,7 @@ class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
         mat = obj.active_material
 
         if mat is None:
-            name = f"{obj.name} Material" if is_title_case else f"{obj.name}_mat"
+            name = get_material_name(obj)
             mat = bpy.data.materials.new(name=name)
             obj.data.materials.append(mat)
 
@@ -127,6 +134,66 @@ class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
         location.x -= bsdf_node.width * 2
         image_node.location = location
 
+        return {"FINISHED"}
+    
+class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
+    """Duplicate Texture on Selected Object"""
+
+    bl_idname = "view3d.pixunwrap_duplicate_texture"
+    bl_label = "duplicate Texture"
+    bl_options = {"UNDO"}
+
+    texture_size: bpy.props.IntProperty(default=64)
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.view_layer.objects.active
+        return find_texture(obj) is not None
+
+    def execute(self, context):
+        obj = bpy.context.view_layer.objects.active
+
+        existing_texture = find_texture(obj)
+
+        #####################
+        # DUPLICATE TEXTURE #
+        #####################
+        new_texture = existing_texture.copy()
+        new_texture.name = get_texture_name(obj)
+
+        new_path = existing_texture.filepath_raw.replace(existing_texture.name, new_texture.name)
+    
+        new_texture.pack()
+        new_texture.filepath = new_path
+        new_texture.filepath_raw = new_path # dissociate from original linked image
+
+        ##############################
+        # SET UV EDITOR TO NEW IMAGE #
+        ##############################
+        for area in bpy.context.screen.areas:
+            if area.type == "IMAGE_EDITOR":
+                area.spaces.active.image = new_texture
+
+        ######################
+        # DUPLICATE MATERIAL #
+        ######################
+
+        existing_mat = obj.active_material
+        new_mat = existing_mat.copy()
+        new_mat.name = get_material_name(obj)
+
+        for slot in obj.material_slots:
+            if slot.material == existing_mat:
+                slot.material = new_mat
+    
+        obj.active_material = new_mat
+
+        # Replace in first found image node.
+        for node in new_mat.node_tree.nodes:
+            if node.type == 'TEX_IMAGE':
+                node.image = new_texture
+                break
+        
         return {"FINISHED"}
 
 

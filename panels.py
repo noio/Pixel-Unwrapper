@@ -33,14 +33,15 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
             context.view_layer.objects.active is not None
             and find_texture(context.view_layer.objects.active) is not None
         )
+        
         can_create_texture = (
             context.view_layer.objects.active is not None and not has_texture
         )
 
-        col = content.column(align=True)
-        col.enabled = can_create_texture
-        col.operator("view3d.pixunwrap_create_texture")
-        col.prop(context.scene, "pixunwrap_new_texture_size", text="Size")
+        row = content.row(align=True)
+        # col.enabled = can_create_texture
+        row.operator("view3d.pixunwrap_create_texture", text="Create New")
+        row.operator("view3d.pixunwrap_duplicate_texture", text="Duplicate")
 
         content.prop(context.scene, "pixunwrap_texel_density")
 
@@ -73,7 +74,7 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         box = layout.box()
         box.label(text="Unwrapping")
 
-        if bpy.context.object.mode != "EDIT":
+        if bpy.context.object is None or bpy.context.object.mode != "EDIT":
             box.enabled = False
 
         col = box.column(align=True)

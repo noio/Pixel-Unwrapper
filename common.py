@@ -375,3 +375,11 @@ def get_path_true_case(path):  # IMPORTANT: <path> must be a Unicode string
 
 def is_path_true_case(path):  # IMPORTANT: <path> must be a Unicode string
     return get_path_true_case(path) == unicodedata.normalize("NFC", path)
+
+def get_texture_name(obj):
+    is_title_case = " " in obj.name or any(letter.isupper() for letter in obj.name)
+    return f"{obj.name} Texture" if is_title_case else f"{obj.name}_tex"
+
+def get_material_name(obj):
+    is_title_case = " " in obj.name or any(letter.isupper() for letter in obj.name)
+    return f"{obj.name} Material" if is_title_case else f"{obj.name}_mat"

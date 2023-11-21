@@ -40,12 +40,6 @@ auto_load.init()
 def register():
     auto_load.register()
 
-    bpy.types.Scene.pixunwrap_new_texture_size = bpy.props.IntProperty(
-        name="New Texture Size",
-        default=64,
-        description="",
-    )
-
     bpy.types.Scene.pixunwrap_texel_density = bpy.props.FloatProperty(
         name="Pixels Per Unit",
         default=16,
