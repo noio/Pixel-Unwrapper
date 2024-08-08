@@ -77,7 +77,8 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         if bpy.context.object is None or bpy.context.object.mode != "EDIT":
             box.enabled = False
 
-        col = box.column(align=True)
+        col = box.column(align=False)
+        col.scale_y =1.5
         col.operator("view3d.pixunwrap_unwrap_pixel_grid", icon="VIEW_ORTHO")
         col.operator("view3d.pixunwrap_unwrap_basic", icon="SELECT_SET")
         # col.operator("view3d.pixunwrap_unwrap_extend", icon="SELECT_SUBTRACT")
@@ -147,6 +148,27 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         row = col.row()
         row.enabled = not preserve_texture
         op = row.operator("view3d.pixunwrap_set_uv_texel_density", icon="MOD_MESHDEFORM")
+
+        row = col.row(align=True)
+        row.enabled = not preserve_texture
+        op = row.operator("view3d.pixunwrap_stack_islands", icon="DUPLICATE")
+
+        row = col.row(align=True)
+        row.enabled = not preserve_texture
+        op = row.operator("view3d.pixunwrap_nudge_islands", icon="BACK",text="")
+        op.move_x = -1
+        op.move_y = 0
+        op = row.operator("view3d.pixunwrap_nudge_islands", icon="SORT_DESC",text="")
+        op.move_x = 0
+        op.move_y = 1
+        op = row.operator("view3d.pixunwrap_nudge_islands", icon="SORT_ASC",text="")
+        op.move_x = 0
+        op.move_y = -1
+        op = row.operator("view3d.pixunwrap_nudge_islands", icon="FORWARD",text="")
+        op.move_x = 1
+        op.move_y = 0
+        row.separator()
+        row.label(text="Nudge")
 
         row = col.row()
         row.enabled = not preserve_texture

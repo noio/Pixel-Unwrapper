@@ -7,7 +7,7 @@ from bmesh.types import BMesh, BMFace
 
 from mathutils import Vector
 
-from .common import Vector2Int, RectInt, any_pinned, elem_max, elem_min
+from .common import LOCK_ORIENTATION_ATTRIBUTE, Vector2Int, RectInt, any_pinned, elem_max, elem_min
 
 
 class UVFace:
@@ -122,7 +122,7 @@ class UVIsland:
 
     def is_any_orientation_locked(self):
         # try:
-        lock_layer = self.mesh.faces.layers.int.get("orientation_locked")
+        lock_layer = self.mesh.faces.layers.int.get(LOCK_ORIENTATION_ATTRIBUTE)
         if lock_layer is None:
             return False
         # print(f"{lock_layer=}")

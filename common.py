@@ -261,10 +261,12 @@ def any_pinned(faces, uv_layer):
                 return True
     return False
 
+LOCK_ORIENTATION_ATTRIBUTE = "pixunwrap_lock_orientation"
+
 def lock_orientation(mesh, face_indices, is_locked):
-    lock_layer = mesh.faces.layers.int.get('orientation_locked')
+    lock_layer = mesh.faces.layers.int.get(LOCK_ORIENTATION_ATTRIBUTE)
     if (lock_layer is None):
-        lock_layer = mesh.faces.layers.int.new('orientation_locked')
+        lock_layer = mesh.faces.layers.int.new(LOCK_ORIENTATION_ATTRIBUTE)
         
     # THIS IS BAD BECAUSE IT LOCKS ALL FACES IN WHOLE MESH NOT JUST IN ISLAND
     for face_index in face_indices:
@@ -376,10 +378,10 @@ def get_path_true_case(path):  # IMPORTANT: <path> must be a Unicode string
 def is_path_true_case(path):  # IMPORTANT: <path> must be a Unicode string
     return get_path_true_case(path) == unicodedata.normalize("NFC", path)
 
-def get_texture_name(obj):
-    is_title_case = " " in obj.name or any(letter.isupper() for letter in obj.name)
-    return f"{obj.name} Texture" if is_title_case else f"{obj.name}_tex"
+def get_texture_name(object_name):
+    is_title_case = " " in object_name or any(letter.isupper() for letter in object_name)
+    return f"{object_name} Texture" if is_title_case else f"{object_name}_tex"
 
-def get_material_name(obj):
-    is_title_case = " " in obj.name or any(letter.isupper() for letter in obj.name)
-    return f"{obj.name} Material" if is_title_case else f"{obj.name}_mat"
+def get_material_name(object_name):
+    is_title_case = " " in object_name or any(letter.isupper() for letter in object_name)
+    return f"{object_name} Material" if is_title_case else f"{object_name}_mat"

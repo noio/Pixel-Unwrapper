@@ -91,7 +91,7 @@ class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
         # CREATE NEW TEXTURE AND FILL WITH DEFAULT GRID #
         #################################################
         new_texture = bpy.data.images.new(
-            name=get_texture_name(obj),
+            name=get_texture_name(obj.name),
             width=self.texture_size,
             height=self.texture_size,
             alpha=True,
@@ -114,7 +114,7 @@ class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
         mat = obj.active_material
 
         if mat is None:
-            name = get_material_name(obj)
+            name = get_material_name(obj.name)
             mat = bpy.data.materials.new(name=name)
             obj.data.materials.append(mat)
 
@@ -140,15 +140,20 @@ class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
     """Duplicate Texture on Selected Object"""
 
     bl_idname = "view3d.pixunwrap_duplicate_texture"
-    bl_label = "duplicate Texture"
+    bl_label = "Duplicate Material & Texture"
     bl_options = {"UNDO"}
 
-    texture_size: bpy.props.IntProperty(default=64)
+    new_name: bpy.props.StringProperty(name="New Name",default="new_name")
+
 
     @classmethod
     def poll(cls, context):
         obj = context.view_layer.objects.active
         return find_texture(obj) is not None
+    
+    def invoke(self, context, event):
+        self.new_name = context.view_layer.objects.active.name
+        return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
         obj = bpy.context.view_layer.objects.active
@@ -158,14 +163,18 @@ class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
         #####################
         # DUPLICATE TEXTURE #
         #####################
-        new_texture = existing_texture.copy()
-        new_texture.name = get_texture_name(obj)
+        new_texture_name = get_texture_name(self.new_name)
+        new_path = f"//Textures/{new_texture_name}.png"
 
-        new_path = existing_texture.filepath_raw.replace(existing_texture.name, new_texture.name)
-    
+        # new_texture = existing_texture.save_as(False,True,filepath=new_path)
+        new_texture = existing_texture.copy()
+        new_texture.name = new_texture_name
+
         new_texture.pack()
         new_texture.filepath = new_path
         new_texture.filepath_raw = new_path # dissociate from original linked image
+        new_texture.save()
+        new_texture.unpack(method='REMOVE')
 
         ##############################
         # SET UV EDITOR TO NEW IMAGE #
@@ -180,7 +189,7 @@ class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
 
         existing_mat = obj.active_material
         new_mat = existing_mat.copy()
-        new_mat.name = get_material_name(obj)
+        new_mat.name = get_material_name(self.new_name)
 
         for slot in obj.material_slots:
             if slot.material == existing_mat:
@@ -513,7 +522,7 @@ class PIXUNWRAP_OT_unwrap_pixel_grid(TextureOperator, bpy.types.Operator):
     """Unwrap Pixel Rect"""
 
     bl_idname = "view3d.pixunwrap_unwrap_pixel_grid"
-    bl_label = "Unwrap Grid"
+    bl_label = "Grid Unwrap"
     bl_options = {"REGISTER", "UNDO"}
 
     snap: bpy.props.EnumProperty(name="Snap Vertices", items=GridSnapModes)
@@ -625,7 +634,7 @@ class PIXUNWRAP_OT_unwrap_basic(TextureOperator, bpy.types.Operator):
     """Standard blender unwrap, but scales to correct pixel density"""
 
     bl_idname = "view3d.pixunwrap_unwrap_basic"
-    bl_label = "Unwrap Basic"
+    bl_label = "Basic Unwrap"
     bl_options = {"UNDO"}
 
     def execute(self, context):
@@ -682,7 +691,7 @@ class PIXUNWRAP_OT_unwrap_single_pixel(TextureOperator, bpy.types.Operator):
     have the same color when painting"""
 
     bl_idname = "view3d.pixunwrap_unwrap_single_pixel"
-    bl_label = "Unwrap to Single Pixel"
+    bl_label = "Single Pixel (Fill)"
     bl_options = {"UNDO"}
 
     def execute(self, context):
@@ -886,6 +895,74 @@ class PIXUNWRAP_OT_uv_rot_90(TextureOperator, bpy.types.Operator):
 
         # THIS INVALIDATES ALL FACE DATA, SO DO IT OUTSIDE OF MAIN LOOP
         lock_orientation(bm, [face.index for face in bm.faces if face.select], True)
+
+        bmesh.update_edit_mesh(obj.data)
+        return {"FINISHED"}
+
+class PIXUNWRAP_OT_stack_islands(TextureOperator, bpy.types.Operator):
+    """Move all selected islands to the position of the first island"""
+    bl_idname = "view3d.pixunwrap_stack_islands"
+    bl_label = "Stack Islands"
+    bl_options = {"UNDO"}
+
+    def execute(self, context):
+        bpy.ops.ed.undo_push()
+
+        self.find_texture(context)
+
+        obj = context.edit_object
+        bm = bmesh.from_edit_mesh(obj.data)
+        uv_layer = bm.loops.layers.uv.verify()
+
+        # FIND ISLANDS
+        islands = get_islands_from_obj(obj, True)
+
+        if (len(islands) > 1):
+            first_island = islands[0]
+            island_rect = first_island.calc_pixel_bounds(self.texture_size)
+            x = island_rect.min.x
+            y = island_rect.min.y
+
+            for other_island in islands[1:]:
+                other_island_rect = other_island.calc_pixel_bounds(self.texture_size)
+                tx = (x - other_island_rect.min.x) / self.texture_size
+                ty = (y - other_island_rect.min.y) / self.texture_size
+            
+            matrix_uv = Matrix.Translation(Vector((tx,ty,0)))
+            uvs_transform(other_island.get_faces(), uv_layer, matrix_uv)
+
+        bmesh.update_edit_mesh(obj.data)
+        return {"FINISHED"}
+    
+class PIXUNWRAP_OT_nudge_islands(TextureOperator, bpy.types.Operator):
+    """Move selected islands by the set number of pixels"""
+
+    bl_idname = "view3d.pixunwrap_nudge_islands"
+    bl_label = "Nudge Islands"
+    bl_options = {"UNDO", "REGISTER"}
+
+    move_x: bpy.props.IntProperty(name="Move X",default=1, min=-32, max=32)
+    move_y: bpy.props.IntProperty(name="Move Y",default=0, min=-32, max=32)
+
+    def execute(self, context):
+        bpy.ops.ed.undo_push()
+
+        self.find_texture(context)
+
+        obj = context.edit_object
+        bm = bmesh.from_edit_mesh(obj.data)
+        uv_layer = bm.loops.layers.uv.verify()
+
+        # FIND ISLANDS
+        islands = get_islands_from_obj(obj, True)
+
+        for island in islands:
+            island_rect = island.calc_pixel_bounds(self.texture_size)
+            tx = self.move_x / self.texture_size
+            ty = self.move_y / self.texture_size
+            
+            matrix_uv = Matrix.Translation(Vector((tx,ty,0)))
+            uvs_transform(island.get_faces(), uv_layer, matrix_uv)
 
         bmesh.update_edit_mesh(obj.data)
         return {"FINISHED"}
