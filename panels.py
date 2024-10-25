@@ -4,6 +4,7 @@ import bpy
 from .texture import PixelArray
 from .common import find_all_textures, find_texture, get_path_true_case
 from .islands import get_islands_from_obj
+from .operators import PIXUNWRAP_OT_transfer_texture
 
 
 class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
@@ -62,6 +63,8 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         row.prop(context.scene, "pixunwrap_texture_fill_color_tr", text="")
         row.prop(context.scene, "pixunwrap_texture_fill_color_bl", text="")
         row.prop(context.scene, "pixunwrap_texture_fill_color_br", text="")
+
+
 
         
 
@@ -181,6 +184,34 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
 
         op = col.row().operator("view3d.pixunwrap_repack_uvs", icon="ALIGN_BOTTOM")
         op.modify_texture = preserve_texture
+
+
+        # ___  __     ___       __   __     __    _        __
+        #  |  |__ \_/  |  |  | |__) |__    |__)  /_\  |_/ |__
+        #  |  |__ / \  |  \__/ |  \ |__    |__) /   \ | \ |__
+        #
+        box = layout.box()
+        header = box.row()
+        header.label(text="Texture Bake")
+        obj = context.active_object
+        buttonlabel = "Bake Texture"
+        if obj and len(obj.data.uv_layers) >= 2:
+            target_uv = obj.data.uv_layers.active
+            source_uv = next((uv for uv in obj.data.uv_layers if uv != target_uv), None)
+            # Find texture name
+            texture_name = None
+            if obj.active_material and obj.active_material.use_nodes:
+                for node in obj.active_material.node_tree.nodes:
+                    if node.type == 'TEX_IMAGE' and node.image:
+                        texture_name = node.image.name
+                        break
+            if source_uv and texture_name:
+                buttonlabel = f"Bake into \"{texture_name}\""
+                box.label(text=f"'{source_uv.name}' -> '{target_uv.name}'")
+        else:
+            box.label(text="Select an object that has 2 UV maps")
+
+        box.operator("view3d.pixunwrap_transfer_texture",text=buttonlabel)
 
 
 class PIXUNWRAP_PT_paint_tools(bpy.types.Panel):

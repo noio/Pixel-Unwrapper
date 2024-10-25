@@ -269,7 +269,115 @@ class PIXUNWRAP_OT_resize_texture(TextureOperator, bpy.types.Operator):
             update_and_free_bmesh(obj_to_update, bm)
 
         return {"FINISHED"}
+    
 
+class PIXUNWRAP_OT_transfer_texture(bpy.types.Operator):
+    """Transfer texture from source UV map to current UV map"""
+    bl_idname = "view3d.pixunwrap_transfer_texture"
+    bl_label = "Transfer Texture"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.mode == 'OBJECT' and
+                context.active_object and 
+                context.active_object.type == 'MESH' and 
+                len(context.active_object.data.uv_layers) >= 2 and 
+                context.active_object.active_material)
+    
+   
+
+    def execute(self, context):
+        obj = context.active_object
+        
+        if context.mode != 'OBJECT':
+            self.report({'ERROR'}, "Must be in Object mode")
+            return {'CANCELLED'}
+
+        # Get active UV map (target) and first non-active UV map (source)
+        target_uv = obj.data.uv_layers.active
+        source_uv = next(uv for uv in obj.data.uv_layers if uv != target_uv)
+
+        # Find existing texture
+        mat = obj.active_material
+        nodes = mat.node_tree.nodes
+        links = mat.node_tree.links
+        
+        texture_node = None
+        for node in nodes:
+            if node.type == 'TEX_IMAGE' and node.image:
+                texture_node = node
+                texture = node.image
+                break
+                
+        if not texture_node:
+            self.report({'ERROR'}, "No texture found in material")
+            return {'CANCELLED'}
+
+        # Create new image with same properties as existing
+        bake_image = bpy.data.images.new(
+            name=f"{texture.name}_new",
+            width=texture.size[0],
+            height=texture.size[1],
+            alpha=True
+        )
+
+        # Store original active node
+        original_active = nodes.active
+
+        # Setup nodes for baking
+        bake_node = nodes.new('ShaderNodeTexImage')
+        bake_node.image = bake_image
+        bake_node.interpolation = texture_node.interpolation
+        bake_node.extension = texture_node.extension
+        bake_node.projection = texture_node.projection
+        bake_node.select = True
+        nodes.active = bake_node
+        
+        # Create emission node for baking
+        emit_node = nodes.new('ShaderNodeEmission')
+        # Connect texture to emission
+        links.new(texture_node.outputs[0], emit_node.inputs[0])
+        
+        # Store original output node and connection
+        output_node = nodes.get('Material Output')
+        if output_node:
+            original_shader = None
+            for link in output_node.inputs[0].links:
+                original_shader = link.from_node
+                break
+            # Connect emission to output
+            if original_shader:
+                links.new(emit_node.outputs[0], output_node.inputs[0])
+
+        # Setup UV maps for baking
+        target_uv.active = True  # Set as active for node/editing
+        source_uv.active_render = True  # Set as active for rendering/baking
+        
+        # Bake
+        original_engine = context.scene.render.engine
+        context.scene.render.engine = 'CYCLES'
+        bpy.ops.object.bake(type='EMIT')
+        context.scene.render.engine = original_engine
+
+        # Restore original material connections
+        if output_node and original_shader:
+            links.new(original_shader.outputs[0], output_node.inputs[0])
+            
+        # Cleanup temp nodes
+        nodes.remove(bake_node)
+        nodes.remove(emit_node)
+        nodes.active = original_active
+
+        # Rename and swap textures
+        old_name = texture.name
+        texture.name = f"{old_name}_old"
+        bake_image.name = old_name
+        
+        # Update the original texture node to use new image
+        texture_node.image = bake_image
+        
+        return {'FINISHED'}
 
 class PIXUNWRAP_OT_swap_eraser(bpy.types.Operator):
     """Swap Eraser"""
