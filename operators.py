@@ -1036,8 +1036,8 @@ class PIXUNWRAP_OT_stack_islands(TextureOperator, bpy.types.Operator):
                 tx = (x - other_island_rect.min.x) / self.texture_size
                 ty = (y - other_island_rect.min.y) / self.texture_size
             
-            matrix_uv = Matrix.Translation(Vector((tx,ty,0)))
-            uvs_transform(other_island.get_faces(), uv_layer, matrix_uv)
+                matrix_uv = Matrix.Translation(Vector((tx,ty,0)))
+                uvs_transform(other_island.get_faces(), uv_layer, matrix_uv)
 
         bmesh.update_edit_mesh(obj.data)
         return {"FINISHED"}
