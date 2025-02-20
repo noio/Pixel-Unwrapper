@@ -29,6 +29,27 @@ class TextureOperator:
         self.texture = find_texture(context.view_layer.objects.active)
         self.texture_size = self.texture.size[0]
 
+    def find_texture_on_faces(self, context, faces):
+        textures = []
+        obj = context.view_layer.objects.active
+        for face in faces:
+            mat_index = face.material_index
+            mat = obj.material_slots[mat_index].material
+            for node in mat.node_tree.nodes:
+                if node.type in ["TEX_ENVIRONMENT", "TEX_IMAGE"]:
+                    if node.image and node.image not in textures:
+                        textures.append(node.image)
+        
+        if len(textures) == 0:
+            self.report({"ERROR"}, f"No texture found on {obj}")
+            return None
+        
+        if len(textures) > 1:
+            self.report({"WARNING"}, f"More than 1 texture found on selected faces. Using first.")
+
+        self.texture = textures[0]
+        self.texture_size = self.texture.size[0]
+
     def error_if_texture_dirty(self):
         if self.texture.is_dirty:
             self.report(
@@ -605,9 +626,7 @@ class PIXUNWRAP_OT_set_uv_texel_density(TextureOperator, bpy.types.Operator):
     bl_options = {"UNDO"}
 
     def execute(self, context):
-        self.find_texture(context)
-
-
+        
         print(f"Preserve texture: {self.preserve_texture=}")
 
         target_density = context.scene.pixunwrap_texel_density
@@ -617,6 +636,10 @@ class PIXUNWRAP_OT_set_uv_texel_density(TextureOperator, bpy.types.Operator):
         uv_layer = bm.loops.layers.uv.verify()
 
         faces = [face for face in bm.faces if face.select]
+
+        self.find_texture_on_faces(context,faces)
+        print(f"Using texture {self.texture} {self.texture_size}")
+        
 
         (current_density, scale) = uvs_scale_texel_density(bm, faces, uv_layer, self.texture_size, target_density)
         self.report({'INFO'}, f"Current: {current_density:.1f} PPU. Target: {target_density:.1f} PPU. Scale: {scale:.4f}")
