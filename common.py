@@ -303,39 +303,82 @@ def update_and_free_bmesh(obj, bm:"BMesh"):
         bm.free()
 
 
-def find_texture(obj, face=None, tex_layer=None):
-    """From MagicUV"""
-    images = find_all_textures(obj, face, tex_layer)
-    images = list(set(images))
+def get_first_texture_on_object(obj):
+    """
+    Returns first texture on any material on given object
+    """
+    textures = get_all_textures_on_object(obj)
 
-    # if len(images) >= 2:
-        # raise RuntimeError(f"{obj} uses two or more materials.")
-    if not images:
+    if len(textures) == 0:
         return None
 
-    return images[0]
+    return textures[0]
 
-
-def find_all_textures(obj, face=None, tex_layer=None):
-    """From MagicUV"""
-
-    # Try to find from texture_layer
-    if tex_layer and face:
-        if face[tex_layer].image is not None:
-            # Return list with one element
-            return [face[tex_layer].image]
-
-    # Not found, search through Shader nodes:
-    images = []
+def get_all_textures_on_object(obj):
+    textures = []
 
     for slot in obj.material_slots:
         if slot.material:
             for node in slot.material.node_tree.nodes:
                 if node.type in ["TEX_ENVIRONMENT", "TEX_IMAGE"]:
                     if node.image:
-                        images.append(node.image)
+                        textures.append(node.image)
 
-    return images
+    textures = list(set(textures))
+    return textures
+
+
+def get_material_index_from_faces(faces):
+    """
+    Checks if same material index is used for all faces,
+    if yes: returns it,
+    if no: returns None
+    """
+    mat_index = None
+    for face in faces:
+        if mat_index is None:
+            mat_index = face.material_index
+        else:
+            if mat_index != face.material_index:
+                return None
+    
+    return mat_index
+            
+def get_texture_from_material_index(obj, material_index):
+    """
+    Gets first used texture on given material
+    """
+    mat = obj.material_slots[material_index].material
+    if not mat:
+        return None
+
+    textures = []
+    for node in mat.node_tree.nodes:
+        if node.type in ["TEX_ENVIRONMENT", "TEX_IMAGE"]:
+            if node.image and node.image not in textures:
+                textures.append(node.image)
+    
+    if len(textures) == 0:
+        return None
+    
+    return textures[0]
+
+
+def find_textures_on_faces(obj, faces):
+    textures = []
+    for face in faces:
+        mat_index = face.material_index
+        mat = obj.material_slots[mat_index].material
+
+        if not mat:
+            continue
+
+        for node in mat.node_tree.nodes:
+            if node.type in ["TEX_ENVIRONMENT", "TEX_IMAGE"]:
+                if node.image and node.image not in textures:
+                    textures.append(node.image)
+    
+    return textures
 
 
 def dump(obj):

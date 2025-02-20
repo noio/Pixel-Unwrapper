@@ -46,6 +46,12 @@ def register():
         description="",
     )
 
+    bpy.types.Scene.pixunwrap_default_texture_size = bpy.props.IntProperty(
+        name="Default Texture Size",
+        default=64,
+        description="This is also used when unwrapping objects that have no texture assigned",
+    )
+
     bpy.types.Scene.pixunwrap_texture_fill_color_tl = bpy.props.FloatVectorProperty(
         name="Texture Fill A",
         default=[0.92, 0.69, 0.69],

@@ -23,10 +23,10 @@ class TextureOperator:
     @classmethod
     def poll(cls, context):
         obj = context.view_layer.objects.active
-        return obj is not None and find_texture(obj) is not None
+        return obj is not None and get_first_texture_on_object(obj) is not None
 
     def find_texture(self, context):
-        self.texture = find_texture(context.view_layer.objects.active)
+        self.texture = get_first_texture_on_object(context.view_layer.objects.active)
         self.texture_size = self.texture.size[0]
 
     def find_texture_on_faces(self, context, faces):
@@ -78,7 +78,7 @@ class TextureOperator:
         objects = []
         for obj in context.view_layer.objects:
             if obj.type == "MESH":
-                obj_textures = find_all_textures(obj)
+                obj_textures = get_all_textures_on_object(obj)
                 if self.texture in obj_textures:
                     objects.append(obj)
         return objects
@@ -96,9 +96,10 @@ class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         obj = context.view_layer.objects.active
-        return find_texture(obj) is None
+        return get_first_texture_on_object(obj) is None
     
     def invoke(self, context, event):
+        self.texture_size = context.scene.pixunwrap_default_texture_size
         return context.window_manager.invoke_props_dialog(self)
 
     def draw(self, context):
@@ -170,7 +171,7 @@ class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         obj = context.view_layer.objects.active
-        return find_texture(obj) is not None
+        return get_first_texture_on_object(obj) is not None
     
     def invoke(self, context, event):
         self.new_name = context.view_layer.objects.active.name
@@ -179,7 +180,7 @@ class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
     def execute(self, context):
         obj = bpy.context.view_layer.objects.active
 
-        existing_texture = find_texture(obj)
+        existing_texture = get_first_texture_on_object(obj)
 
         #####################
         # DUPLICATE TEXTURE #
@@ -649,7 +650,7 @@ class PIXUNWRAP_OT_set_uv_texel_density(TextureOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXUNWRAP_OT_unwrap_pixel_grid(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_unwrap_pixel_grid(bpy.types.Operator):
     """Unwrap Pixel Rect"""
 
     bl_idname = "view3d.pixunwrap_unwrap_pixel_grid"
@@ -659,8 +660,6 @@ class PIXUNWRAP_OT_unwrap_pixel_grid(TextureOperator, bpy.types.Operator):
     snap: bpy.props.EnumProperty(name="Snap Vertices", items=GridSnapModes)
 
     def execute(self, context):
-        # bpy.ops.uv.select_split()
-        self.find_texture(context)
 
         target_density = context.scene.pixunwrap_texel_density
 
@@ -668,14 +667,26 @@ class PIXUNWRAP_OT_unwrap_pixel_grid(TextureOperator, bpy.types.Operator):
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
 
-        all_target_faces = [face for face in bm.faces if face.select]
+        selected_faces = [face for face in bm.faces if face.select]
 
-        for quad_group, connected_non_quads in zip(*find_quad_groups(all_target_faces)):
+        for quad_group, connected_non_quads in zip(*find_quad_groups(selected_faces)):
             # print(
             #     f"UNWRAPPING QUAD ISLAND with {len(quad_group)} quads and {len(connected_non_quads)} attached non-quads"
             # )
 
-            for face in all_target_faces:
+            mat_index = get_material_index_from_faces(quad_group + connected_non_quads)
+            print(f"Mat index: {mat_index=}")
+            if mat_index is None:
+                self.report({"ERROR"}, "UV island uses more than one texture. Aborting.")
+                return {"CANCELLED"}
+            
+            texture = get_texture_from_material_index(obj, mat_index)
+            if texture is None:
+                texture_size = context.scene.pixunwrap_default_texture_size
+            else:
+                texture_size = texture.size[0]
+
+            for face in selected_faces:
                 face.select = False
 
             for face in quad_group:
@@ -695,7 +706,7 @@ class PIXUNWRAP_OT_unwrap_pixel_grid(TextureOperator, bpy.types.Operator):
                 self.report({"ERROR"}, str(e))
                 return {"CANCELLED"}
 
-            grid.straighten_uv(uv_layer, self.snap, self.texture_size, target_density)
+            grid.straighten_uv(uv_layer, self.snap, texture_size, target_density)
 
             # Attach the non-quad faces to the quad grid:
             uvs_pin(quad_group, uv_layer)
@@ -719,7 +730,7 @@ class PIXUNWRAP_OT_unwrap_pixel_grid(TextureOperator, bpy.types.Operator):
             bpy.ops.view3d.pixunwrap_island_to_free_space(modify_texture=False)
 
         # Wrap things up: Reselect all faces (because we messed with selections)
-        for face in all_target_faces:
+        for face in selected_faces:
             face.select = True
 
         bmesh.update_edit_mesh(obj.data)
@@ -932,7 +943,7 @@ class PIXUNWRAP_OT_uv_flip(TextureOperator, bpy.types.Operator):
         islands = get_islands_from_obj(obj, True)
         islands = merge_overlapping_islands(islands)
 
-        texture = find_texture(obj)
+        texture = get_first_texture_on_object(obj)
 
         for island in islands:
             island_rect = island.calc_pixel_bounds(self.texture_size)
@@ -983,7 +994,7 @@ class PIXUNWRAP_OT_uv_rot_90(TextureOperator, bpy.types.Operator):
         islands = get_islands_from_obj(obj, True)
         islands = merge_overlapping_islands(islands)
 
-        texture = find_texture(obj)
+        texture = get_first_texture_on_object(obj)
 
         for island in islands:
             island_rect = island.calc_pixel_bounds(self.texture_size)
@@ -1157,14 +1168,14 @@ class PIXUNWRAP_OT_object_info(bpy.types.Operator):
 
     def execute(self, context):
         active_obj = context.view_layer.objects.active
-        textures = find_all_textures(active_obj)
+        textures = get_all_textures_on_object(active_obj)
         textures = list(set(textures))
 
         objects_sharing_texture = []
         for tex in textures:
             for obj in context.view_layer.objects:
                 if obj.type == "MESH":
-                    obj_textures = find_all_textures(obj)
+                    obj_textures = get_all_textures_on_object(obj)
                     if tex in obj_textures:
                         objects_sharing_texture.append(obj)
             

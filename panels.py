@@ -2,7 +2,7 @@ import os
 import bpy
 
 from .texture import PixelArray
-from .common import find_all_textures, find_texture, get_path_true_case
+from .common import get_all_textures_on_object, get_first_texture_on_object, get_path_true_case
 from .islands import get_islands_from_obj
 from .operators import PIXUNWRAP_OT_transfer_texture
 
@@ -32,7 +32,7 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
 
         has_texture = (
             context.view_layer.objects.active is not None
-            and find_texture(context.view_layer.objects.active) is not None
+            and get_first_texture_on_object(context.view_layer.objects.active) is not None
         )
         
         can_create_texture = (
@@ -45,6 +45,7 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         row.operator("view3d.pixunwrap_duplicate_texture", text="Duplicate")
 
         content.prop(context.scene, "pixunwrap_texel_density")
+        content.prop(context.scene, "pixunwrap_default_texture_size")
 
 
         # row = col.row(align=True)
@@ -96,7 +97,7 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         # |__ |__/ |  |     \__/  \/  .__)
         #
         box = layout.box()
-        if bpy.context.object.mode != "EDIT":
+        if bpy.context.object is None or bpy.context.object.mode != "EDIT":
             box.enabled = False
 
         header = box.row()
