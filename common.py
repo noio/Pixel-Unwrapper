@@ -11,7 +11,9 @@ from mathutils import Vector, Matrix
 
 ERROR_MULTIPLE_MATERIALS = "Faces have different materials"
 ERROR_TEXTURE_DIRTY = f"Please save texture first, because undo doesn't work for textures."
-ERROR_NO_TEXTURE_SPACE = f"Not enough space to preserve texture data. Resize texture or turn off \"Modify Texture\""
+ERROR_NO_TEXTURE_SPACE = f'Not enough space to preserve texture data. Resize texture or turn off "Modify Texture"'
+ERROR_SELECT_ALL_FACES_USING_MATERIAL = "Please select ALL faces using the material with the texture you want to resize"
+ERROR_NO_MATERIAL_OR_NO_TEXTURE = "Selected faces have no material or no texture was found on the material"
 
 
 @dataclass(frozen=True)
@@ -92,12 +94,8 @@ class RectInt:
         )
 
     def encapsulate(self, other: "RectInt"):
-        self.min = Vector2Int(
-            min(self.min.x, other.min.x), min(self.min.y, other.min.y)
-        )
-        self.max = Vector2Int(
-            max(self.max.x, other.max.x), max(self.max.y, other.max.y)
-        )
+        self.min = Vector2Int(min(self.min.x, other.min.x), min(self.min.y, other.min.y))
+        self.max = Vector2Int(max(self.max.x, other.max.x), max(self.max.y, other.max.y))
 
 
 def elem_min(a, b):
@@ -108,10 +106,6 @@ def elem_min(a, b):
 def elem_max(a, b):
     elems = [max(pair) for pair in zip(a, b)]
     return Vector(elems)
-
-
-def flatten(t):
-    return [item for sublist in t for item in sublist]
 
 
 def measure_all_faces_uv_area(bm, uv_layer):
@@ -148,12 +142,14 @@ def vert_between_edges(edge_a, edge_b):
     elif edge_a.verts[1] in edge_b.verts:
         return edge_a.verts[1]
 
+
 def get_uv_space_matrix(matrix: Matrix, texture_size):
     scale_up = Matrix.Scale(texture_size, 3)
     scale_up[2][2] = 1
-    scale_down = Matrix.Scale(1.0/texture_size, 3)
+    scale_down = Matrix.Scale(1.0 / texture_size, 3)
     scale_down[2][2] = 1
     return scale_down @ matrix @ scale_up
+
 
 def matrix_pin_pivot(matrix: Matrix, pivot: Vector):
     pivot = pivot.to_3d()
@@ -203,11 +199,7 @@ def uvs_translate_rotate_scale(
     uvs_transform(faces, uv_layer, matrix)
 
 
-def uvs_transform(
-    faces,
-    uv_layer,
-    transformation=Matrix
-):
+def uvs_transform(faces, uv_layer, transformation=Matrix):
     """
     Transform all UV coordsin the given faces using the given matrix
     """
@@ -216,15 +208,12 @@ def uvs_transform(
             uv = loop_uv[uv_layer].uv
             uv = uv.to_3d()
             uv.z = 1
-            transformed = (transformation @ uv)
+            transformed = transformation @ uv
             transformed /= transformed.z
             loop_uv[uv_layer].uv = transformed.xy
 
-def uvs_scale(
-    faces,
-    uv_layer,
-    scale: Vector
-    ):
+
+def uvs_scale(faces, uv_layer, scale: Vector):
     for face in faces:
         for loop_uv in face.loops:
             uv = loop_uv[uv_layer].uv
@@ -266,28 +255,30 @@ def any_pinned(faces, uv_layer):
                 return True
     return False
 
+
 LOCK_ORIENTATION_ATTRIBUTE = "pixunwrap_lock_orientation"
+
 
 def lock_orientation(mesh, face_indices, is_locked):
     lock_layer = mesh.faces.layers.int.get(LOCK_ORIENTATION_ATTRIBUTE)
-    if (lock_layer is None):
+    if lock_layer is None:
         lock_layer = mesh.faces.layers.int.new(LOCK_ORIENTATION_ATTRIBUTE)
-        
+
     # THIS IS BAD BECAUSE IT LOCKS ALL FACES IN WHOLE MESH NOT JUST IN ISLAND
     for face_index in face_indices:
         face = mesh.faces[face_index]
         face[lock_layer] = 1 if is_locked else 0
     # print([face[lock_layer] for face in self.mesh.faces])
 
+
 def is_outer_edge_of_selection(edge):
-    return (
-        len(list(edge_face for edge_face in edge.link_faces if edge_face.select)) <= 1
-    )
+    return len(list(edge_face for edge_face in edge.link_faces if edge_face.select)) <= 1
+
 
 def get_bmesh(obj) -> "BMesh":
     """
     Get a BMesh from the given object, will use either
-    `bmesh.from_edit_mesh` or `from_mesh`, depending on 
+    `bmesh.from_edit_mesh` or `from_mesh`, depending on
     whether object is in Edit mode
     """
     if obj.data.is_editmode:
@@ -297,9 +288,10 @@ def get_bmesh(obj) -> "BMesh":
         bm.from_mesh(obj.data)
     return bm
 
-def update_and_free_bmesh(obj, bm:"BMesh"):
+
+def update_and_free_bmesh(obj, bm: "BMesh"):
     """
-    updates mesh data on the given object. 
+    updates mesh data on the given object.
     """
     if obj.data.is_editmode:
         bmesh.update_edit_mesh(obj.data)
@@ -312,12 +304,14 @@ def get_first_texture_on_object(obj):
     """
     Returns first texture on any material on given object
     """
-    textures = get_all_textures_on_object(obj)
+    for slot in obj.material_slots:
+        if slot.material:
+            for node in slot.material.node_tree.nodes:
+                if node.type in ["TEX_ENVIRONMENT", "TEX_IMAGE"]:
+                    if node.image:
+                        return node.image
+    return None
 
-    if len(textures) == 0:
-        return None
-
-    return textures[0]
 
 def get_all_textures_on_object(obj):
     textures = []
@@ -343,51 +337,42 @@ def get_material_index_from_faces(faces: "list[BMFace]"):
     if yes: returns it,
     if no: do what?!
     """
-    mat_index = None
+    first_material_index = None
     for face in faces:
-        if mat_index is None:
-            mat_index = face.material_index
+        if first_material_index is None:
+            first_material_index = face.material_index
         else:
-            if mat_index != face.material_index:
-                return None # DO WHAT HERE?!
-    
-    return mat_index
+            if first_material_index != face.material_index:
+                return None
+
+    return first_material_index
 
 
-def get_texture_size_for_faces(context, obj, faces):
+def get_texture_for_faces(obj, faces):
     """
     Get appropriate texture size for faces.
-    Raises ValueError if faces have different materials.
+    Raises MultipleMaterialsError if faces have different materials.
     """
     material_index = get_material_index_from_faces(faces)
     if material_index is None:
         raise MultipleMaterialsError(ERROR_MULTIPLE_MATERIALS)
 
-    texture = get_texture_from_material_index(obj, material_index)
-    return (texture.size[0] if texture is not None
-            else context.scene.pixunwrap_default_texture_size)
-
-def get_texture_from_material_index(obj, material_index):
-    """
-    Gets first used texture on given material
-    """
+    # Early returns if no valid material
     if len(obj.material_slots) < material_index - 1:
         return None
-    
+
     mat = obj.material_slots[material_index].material
     if not mat:
         return None
 
-    textures = []
+    # Return first found texture
     for node in mat.node_tree.nodes:
         if node.type in ["TEX_ENVIRONMENT", "TEX_IMAGE"]:
-            if node.image and node.image not in textures:
-                textures.append(node.image)
-    
-    if len(textures) == 0:
-        return None
-    
-    return textures[0]
+            if node.image:
+                return node.image
+
+    return None
+
 
 def get_all_objects_with_texture(context, texture) -> "list[bpy.types.Object]":
     objects = []
@@ -399,34 +384,11 @@ def get_all_objects_with_texture(context, texture) -> "list[bpy.types.Object]":
     return objects
 
 
-def find_textures_on_faces(obj, faces):
-    textures = []
-    for face in faces:
-        mat_index = face.material_index
-        mat = obj.material_slots[mat_index].material
-
-        if not mat:
-            continue
-
-        for node in mat.node_tree.nodes:
-            if node.type in ["TEX_ENVIRONMENT", "TEX_IMAGE"]:
-                if node.image and node.image not in textures:
-                    textures.append(node.image)
-    
-    return textures
-
-
 def is_out_of_bounds(texture_size, pos: "Vector2Int", size: "Vector2Int"):
     max_coord = pos + size
-    if not (
-            pos.x >= 0
-            and max_coord.x <= texture_size
-            and pos.y >= 0
-            and max_coord.y <= texture_size
-    ):
+    if not (pos.x >= 0 and max_coord.x <= texture_size and pos.y >= 0 and max_coord.y <= texture_size):
         return True
     return False
-
 
 
 def dump(obj):
@@ -451,9 +413,7 @@ def get_path_true_case(path):  # IMPORTANT: <path> must be a Unicode string
             if leaf_lower == leaf.lower():  # see .casefold() comment above
                 found = True
                 if isosx:
-                    leaf = unicodedata.normalize(
-                        "NFC", leaf
-                    )  # convert to NFC for return value
+                    leaf = unicodedata.normalize("NFC", leaf)  # convert to NFC for return value
                 break
         if not found:
             # should only happen if the path was just deleted
@@ -469,9 +429,11 @@ def get_path_true_case(path):  # IMPORTANT: <path> must be a Unicode string
 def is_path_true_case(path):  # IMPORTANT: <path> must be a Unicode string
     return get_path_true_case(path) == unicodedata.normalize("NFC", path)
 
+
 def get_texture_name(object_name):
     is_title_case = " " in object_name or any(letter.isupper() for letter in object_name)
     return f"{object_name} Texture" if is_title_case else f"{object_name}_tex"
+
 
 def get_material_name(object_name):
     is_title_case = " " in object_name or any(letter.isupper() for letter in object_name)

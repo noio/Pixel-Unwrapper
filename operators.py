@@ -1,17 +1,12 @@
-from cgitb import text
+import random
 from itertools import chain
 from math import cos, sin, pi
-import random
-
-import bpy
-import bmesh
-from mathutils import Vector
 
 from .common import *
-from .texture import PixelArray, copy_texture_region, copy_texture_region_transformed
-from .packing import find_free_space_for_island, pack_rects
-from .islands import *
 from .grids import Grid, GridBuildException, GridSnapModes
+from .islands import *
+from .packing import find_free_space_for_island, pack_rects
+from .texture import PixelArray, copy_texture_region, copy_texture_region_transformed
 
 
 def poll_edit_mode_selected_faces_uvsync(context):
@@ -28,72 +23,6 @@ def poll_edit_mode_selected_faces_uvsync(context):
         return any(face.select for face in bm.faces)
     except Exception:
         return False
-
-class TextureOperator:
-    preserve_texture: bpy.props.BoolProperty(default=False)
-
-    @classmethod
-    def poll(cls, context):
-        obj = context.view_layer.objects.active
-        return obj is not None and get_first_texture_on_object(obj) is not None
-
-    def find_texture(self, context):
-        self.texture = get_first_texture_on_object(context.view_layer.objects.active)
-        self.texture_size = self.texture.size[0]
-
-    def find_texture_on_faces(self, context, faces):
-        textures = []
-        obj = context.view_layer.objects.active
-        for face in faces:
-            mat_index = face.material_index
-            mat = obj.material_slots[mat_index].material
-            for node in mat.node_tree.nodes:
-                if node.type in ["TEX_ENVIRONMENT", "TEX_IMAGE"]:
-                    if node.image and node.image not in textures:
-                        textures.append(node.image)
-
-        if len(textures) == 0:
-            self.report({"ERROR"}, f"No texture found on {obj}")
-            return None
-
-        if len(textures) > 1:
-            self.report({"WARNING"}, f"More than 1 texture found on selected faces. Using first.")
-
-        self.texture = textures[0]
-        self.texture_size = self.texture.size[0]
-
-    def error_if_texture_dirty(self):
-        if self.texture.is_dirty:
-            self.report(
-                {"ERROR"},
-                f'Please save "{self.texture.name}" first, because undo doesn\'t work for textures.',
-            )
-            return True
-        return False
-
-    def error_if_out_of_bounds(self, pos: "Vector2Int", size: "Vector2Int"):
-        max = pos + size
-        if not (
-                pos.x >= 0
-                and max.x <= self.texture_size
-                and pos.y >= 0
-                and max.y <= self.texture_size
-        ):
-            self.report(
-                {"ERROR"},
-                f'Not enough space to preserve texture data. Resize texture or turn off "Modify Texture"',
-            )
-            return True
-        return False
-
-    def all_objects_with_texture(self, context) -> "list[bpy.types.Object]":
-        objects = []
-        for obj in context.view_layer.objects:
-            if obj.type == "MESH":
-                obj_textures = get_all_textures_on_object(obj)
-                if self.texture in obj_textures:
-                    objects.append(obj)
-        return objects
 
 
 class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
@@ -119,7 +48,7 @@ class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
         row.prop(self, "texture_size", text="Texture Size")
 
     def execute(self, context):
-        obj = bpy.context.view_layer.objects.active
+        obj = context.edit_object
 
         #################################################
         # CREATE NEW TEXTURE AND FILL WITH DEFAULT GRID #
@@ -158,9 +87,7 @@ class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
         image_node.interpolation = "Closest"
 
         bsdf_node = mat.node_tree.nodes["Principled BSDF"]
-        mat.node_tree.links.new(
-            image_node.outputs["Color"], bsdf_node.inputs["Base Color"]
-        )
+        mat.node_tree.links.new(image_node.outputs["Color"], bsdf_node.inputs["Base Color"])
         mat.node_tree.links.new(image_node.outputs["Alpha"], bsdf_node.inputs["Alpha"])
 
         location = bsdf_node.location.copy()
@@ -189,7 +116,7 @@ class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
-        obj = bpy.context.view_layer.objects.active
+        obj = context.edit_object
 
         existing_texture = get_first_texture_on_object(obj)
 
@@ -207,7 +134,7 @@ class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
         new_texture.filepath = new_path
         new_texture.filepath_raw = new_path  # dissociate from original linked image
         new_texture.save()
-        new_texture.unpack(method='REMOVE')
+        new_texture.unpack(method="REMOVE")
 
         ##############################
         # SET UV EDITOR TO NEW IMAGE #
@@ -232,14 +159,14 @@ class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
 
         # Replace in first found image node.
         for node in new_mat.node_tree.nodes:
-            if node.type == 'TEX_IMAGE':
+            if node.type == "TEX_IMAGE":
                 node.image = new_texture
                 break
 
         return {"FINISHED"}
 
 
-class PIXUNWRAP_OT_resize_texture(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_resize_texture(bpy.types.Operator):
     """Resize Texture on Selected Object"""
 
     bl_idname = "view3d.pixunwrap_resize_texture"
@@ -247,52 +174,66 @@ class PIXUNWRAP_OT_resize_texture(TextureOperator, bpy.types.Operator):
     bl_options = {"UNDO"}
 
     scale: bpy.props.FloatProperty(default=2)
-    only_update_uvs_on_active: bpy.props.BoolProperty(default=False)
+    only_update_uvs_on_active: bpy.props.BoolProperty(default=True)
+
+    @classmethod
+    def poll(cls, context):
+        return poll_edit_mode_selected_faces_uvsync(context)
 
     def execute(self, context):
-        obj = context.view_layer.objects.active
+        obj = context.edit_object
+        bm = bmesh.from_edit_mesh(obj.data)
 
-        self.find_texture(context)
-        new_size = round(self.texture_size * self.scale)
-
-        if self.error_if_texture_dirty():
+        selected_faces = [face for face in bm.faces if face.select]
+        try:
+            texture = get_texture_for_faces(obj, selected_faces)
+            texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
+        except MultipleMaterialsError as e:
+            self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
 
-        if new_size < 2:
+        if texture is None:
+            self.report({"ERROR"}, ERROR_NO_MATERIAL_OR_NO_TEXTURE)
+            return {"CANCELLED"}
+
+        material_index = selected_faces[0].material_index
+        # Check if any face using this material is unselected
+        if any(face.material_index == material_index and not face.select for face in bm.faces):
+            self.report({"ERROR"}, ERROR_SELECT_ALL_FACES_USING_MATERIAL)
+            return {"CANCELLED"}
+
+        if texture.is_dirty:
+            self.report({"ERROR"}, ERROR_TEXTURE_DIRTY)
+            return {"CANCELLED"}
+
+        new_size = round(texture_size * self.scale)
+
+        if new_size < 16:
             self.report({"ERROR"}, "That's too small.")
             return {"CANCELLED"}
 
         if new_size > 8192:
-            self.report(
-                {"ERROR"},
-                f"New texture would be {new_size} pixels, that's probably too big.",
-            )
+            self.report({"ERROR"}, f"New texture would be {new_size} pixels, that's probably too big.")
             return {"CANCELLED"}
 
         # SCALE UP THE TEXTURE AND PRESERVE THE DATA
         # WHEN SCALING DOWN, TEXTURE IS CROPPED TO BOTTOM LEFT
-        src_pixels = PixelArray(blender_image=self.texture)
+        src_pixels = PixelArray(blender_image=texture)
         dst_pixels = PixelArray(size=new_size)
 
         copy_region_size = Vector2Int(dst_pixels.width, dst_pixels.height)
-        dst_pixels.copy_region(
-            src_pixels, Vector2Int(0, 0), copy_region_size, Vector2Int(0, 0)
-        )
+        dst_pixels.copy_region(src_pixels, Vector2Int(0, 0), copy_region_size, Vector2Int(0, 0))
 
-        self.texture.scale(new_size, new_size)
-        self.texture.pixels = dst_pixels.pixels
-        self.texture.update()
+        texture.scale(new_size, new_size)
+        texture.pixels = dst_pixels.pixels
+        texture.update()
 
         # UPDATE THE UVS TO SPAN THE SAME PIXELS
         # FIND ALL OBJECTS THAT USE THE SAME TEXTURE:
         # (if option enabled, otherwise just do it on active object)
-        objs_to_update_uvs = (
-            [obj]
-            if self.only_update_uvs_on_active
-            else self.all_objects_with_texture(context)
-        )
+        objs_to_update_uvs = [obj] if self.only_update_uvs_on_active else get_all_objects_with_texture(context, texture)
 
-        actual_scale_inv = self.texture_size / new_size
+        actual_scale_inv = texture_size / new_size
 
         for obj_to_update in objs_to_update_uvs:
             bm = get_bmesh(obj_to_update)
@@ -307,24 +248,27 @@ class PIXUNWRAP_OT_resize_texture(TextureOperator, bpy.types.Operator):
 
 class PIXUNWRAP_OT_transfer_texture(bpy.types.Operator):
     """Transfer texture from source UV map to current UV map"""
+
     bl_idname = "view3d.pixunwrap_transfer_texture"
     bl_label = "Transfer Texture"
-    bl_options = {'REGISTER', 'UNDO'}
+    bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
     def poll(cls, context):
-        return (context.mode == 'OBJECT' and
-                context.active_object and
-                context.active_object.type == 'MESH' and
-                len(context.active_object.data.uv_layers) >= 2 and
-                context.active_object.active_material)
+        return (
+            context.mode == "OBJECT"
+            and context.active_object
+            and context.active_object.type == "MESH"
+            and len(context.active_object.data.uv_layers) >= 2
+            and context.active_object.active_material
+        )
 
     def execute(self, context):
         obj = context.active_object
 
-        if context.mode != 'OBJECT':
-            self.report({'ERROR'}, "Must be in Object mode")
-            return {'CANCELLED'}
+        if context.mode != "OBJECT":
+            self.report({"ERROR"}, "Must be in Object mode")
+            return {"CANCELLED"}
 
         # Get active UV map (target) and first non-active UV map (source)
         target_uv = obj.data.uv_layers.active
@@ -337,28 +281,25 @@ class PIXUNWRAP_OT_transfer_texture(bpy.types.Operator):
 
         texture_node = None
         for node in nodes:
-            if node.type == 'TEX_IMAGE' and node.image:
+            if node.type == "TEX_IMAGE" and node.image:
                 texture_node = node
                 texture = node.image
                 break
 
         if not texture_node:
-            self.report({'ERROR'}, "No texture found in material")
-            return {'CANCELLED'}
+            self.report({"ERROR"}, "No texture found in material")
+            return {"CANCELLED"}
 
         # Create new image with same properties as existing
         bake_image = bpy.data.images.new(
-            name=f"{texture.name}_new",
-            width=texture.size[0],
-            height=texture.size[1],
-            alpha=True
+            name=f"{texture.name}_new", width=texture.size[0], height=texture.size[1], alpha=True
         )
 
         # Store original active node
         original_active = nodes.active
 
         # Setup nodes for baking
-        bake_node = nodes.new('ShaderNodeTexImage')
+        bake_node = nodes.new("ShaderNodeTexImage")
         bake_node.image = bake_image
         bake_node.interpolation = texture_node.interpolation
         bake_node.extension = texture_node.extension
@@ -367,12 +308,12 @@ class PIXUNWRAP_OT_transfer_texture(bpy.types.Operator):
         nodes.active = bake_node
 
         # Create emission node for baking
-        emit_node = nodes.new('ShaderNodeEmission')
+        emit_node = nodes.new("ShaderNodeEmission")
         # Connect texture to emission
         links.new(texture_node.outputs[0], emit_node.inputs[0])
 
         # Store original output node and connection
-        output_node = nodes.get('Material Output')
+        output_node = nodes.get("Material Output")
         if output_node:
             original_shader = None
             for link in output_node.inputs[0].links:
@@ -388,8 +329,8 @@ class PIXUNWRAP_OT_transfer_texture(bpy.types.Operator):
 
         # Bake
         original_engine = context.scene.render.engine
-        context.scene.render.engine = 'CYCLES'
-        bpy.ops.object.bake(type='EMIT')
+        context.scene.render.engine = "CYCLES"
+        bpy.ops.object.bake(type="EMIT")
         context.scene.render.engine = original_engine
 
         # Restore original material connections
@@ -409,7 +350,7 @@ class PIXUNWRAP_OT_transfer_texture(bpy.types.Operator):
         # Update the original texture node to use new image
         texture_node.image = bake_image
 
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class PIXUNWRAP_OT_swap_eraser(bpy.types.Operator):
@@ -470,11 +411,7 @@ class PIXUNWRAP_OT_island_to_free_space(bpy.types.Operator):
 
         if self.move_entire_island:
             all_islands = get_islands_from_obj(obj, False)
-            selected_islands = [
-                isl
-                for isl in all_islands
-                if any(uvf.face.select for uvf in isl.uv_faces)
-            ]
+            selected_islands = [isl for isl in all_islands if any(uvf.face.select for uvf in isl.uv_faces)]
         else:
             selected_faces = [face for face in bm.faces if face.select]
             other_faces = [face for face in bm.faces if not face.select]
@@ -485,16 +422,16 @@ class PIXUNWRAP_OT_island_to_free_space(bpy.types.Operator):
         # share the same material index:
         used_faces = list(chain.from_iterable(island.get_faces() for island in selected_islands))
 
-        material_index = get_material_index_from_faces(used_faces)
-        if material_index is None:
-            self.report({"ERROR"}, ERROR_MULTIPLE_MATERIALS)
+        try:
+            texture = get_texture_for_faces(obj, used_faces)
+            texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
+        except MultipleMaterialsError as e:
+            self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
 
-        texture = get_texture_from_material_index(obj, material_index)
         if texture is None:
-            texture_size = context.scene.pixunwrap_default_texture_size
-        else:
-            texture_size = texture.size[0]
+            self.report({"ERROR"}, ERROR_NO_MATERIAL_OR_NO_TEXTURE)
+            return {"CANCELLED"}
 
         selected_islands = merge_overlapping_islands(selected_islands)
 
@@ -545,7 +482,7 @@ class PIXUNWRAP_OT_island_to_free_space(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXUNWRAP_OT_repack_uvs(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_repack_uvs(bpy.types.Operator):
     """Repack all UV islands in the editing mesh in a more efficient way"""
 
     bl_idname = "view3d.pixunwrap_repack_uvs"
@@ -554,13 +491,37 @@ class PIXUNWRAP_OT_repack_uvs(TextureOperator, bpy.types.Operator):
 
     modify_texture: bpy.props.BoolProperty(default=False)
 
+    @classmethod
+    def poll(cls, context):
+        return poll_edit_mode_selected_faces_uvsync(context)
+
+
     def execute(self, context):
-        obj = bpy.context.view_layer.objects.active
-
-        self.find_texture(context)
-
+        obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
+
+        selected_faces = [face for face in bm.faces if face.select]
+        try:
+            texture = get_texture_for_faces(obj, selected_faces)
+            texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
+        except MultipleMaterialsError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+
+        if texture is None:
+            self.report({"ERROR"}, ERROR_NO_MATERIAL_OR_NO_TEXTURE)
+            return {"CANCELLED"}
+
+        material_index = selected_faces[0].material_index
+        # Check if any face using this material is unselected
+        if any(face.material_index == material_index and not face.select for face in bm.faces):
+            self.report({"ERROR"}, ERROR_SELECT_ALL_FACES_USING_MATERIAL)
+            return {"CANCELLED"}
+
+        if texture.is_dirty:
+            self.report({"ERROR"}, ERROR_TEXTURE_DIRTY)
+            return {"CANCELLED"}
 
         # FIND ISLANDS
         islands = get_islands_from_obj(obj, False)
@@ -570,7 +531,7 @@ class PIXUNWRAP_OT_repack_uvs(TextureOperator, bpy.types.Operator):
         need_flip = []
         old_rects = []
         for uv_island in islands:
-            pixel_bounds = uv_island.calc_pixel_bounds(self.texture_size)
+            pixel_bounds = uv_island.calc_pixel_bounds(texture_size)
             rect_size = pixel_bounds.size
 
             locked = uv_island.is_any_orientation_locked()
@@ -586,24 +547,24 @@ class PIXUNWRAP_OT_repack_uvs(TextureOperator, bpy.types.Operator):
 
         # Try one size smaller (but only if the texture can be divided by 2)
         # and only if we're allowed to modify the texture
-        min_size = self.texture_size // 2 if (self.texture_size % 2 == 0) else self.texture_size
+        min_size = texture_size // 2 if (texture_size % 2 == 0) else texture_size
         new_positions, needed_size = pack_rects(sizes, min_size)
 
-        modify_texture = self.modify_texture and self.texture is not None
+        modify_texture = self.modify_texture and texture is not None
 
         if modify_texture:
-            if self.error_if_out_of_bounds(Vector2Int(0, 0), Vector2Int(needed_size, 1)):
+            if needed_size > texture_size:
+                self.report({"ERROR"}, ERROR_NO_TEXTURE_SPACE)
                 return {"CANCELLED"}
 
-            if self.error_if_texture_dirty():
+            if texture.is_dirty:
+                self.report({"ERROR"}, ERROR_TEXTURE_DIRTY)
                 return {"CANCELLED"}
 
             src_pixels = PixelArray(blender_image=self.texture)
             dst_pixels = PixelArray(size=self.texture_size)
 
-        for new_pos, old_rect, island, flip in zip(
-                new_positions, old_rects, islands, need_flip
-        ):
+        for new_pos, old_rect, island, flip in zip(new_positions, old_rects, islands, need_flip):
             new_pos = Vector2Int(new_pos[0], new_pos[1])
 
             old_pos = old_rect.min
@@ -614,7 +575,7 @@ class PIXUNWRAP_OT_repack_uvs(TextureOperator, bpy.types.Operator):
             matrix[0][2] = offset.x
             matrix[1][2] = offset.y
 
-            faces = [faceinfo.face for faceinfo in island.uv_faces]
+            faces = [face_info.face for face_info in island.uv_faces]
 
             # Should the rectangular UV island be flipped?
             # We do this in a way that preserves the bottom left point
@@ -628,7 +589,7 @@ class PIXUNWRAP_OT_repack_uvs(TextureOperator, bpy.types.Operator):
                 matrix_pin_pivot(flip_matrix, pivot)
                 matrix = matrix @ flip_matrix
 
-            matrix_uv = get_uv_space_matrix(matrix, self.texture_size)
+            matrix_uv = get_uv_space_matrix(matrix, texture_size)
 
             uvs_transform(faces, uv_layer, matrix_uv)
 
@@ -659,21 +620,23 @@ class PIXUNWRAP_OT_set_uv_texel_density(bpy.types.Operator):
     def execute(self, context):
         target_density = context.scene.pixunwrap_texel_density
 
-        obj = bpy.context.view_layer.objects.active
+        obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
 
         faces = [face for face in bm.faces if face.select]
 
         try:
-            texture_size = get_texture_size_for_faces(context, obj, faces)
+            texture = get_texture_for_faces(obj, faces)
+            texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
         except MultipleMaterialsError as e:
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
 
         (current_density, scale) = uvs_scale_texel_density(bm, faces, uv_layer, texture_size, target_density)
-        self.report({'INFO'},
-                    f"Current: {current_density:.1f} PPU. Target: {target_density:.1f} PPU. Scale: {scale:.4f}")
+        self.report(
+            {"INFO"}, f"Current: {current_density:.1f} PPU. Target: {target_density:.1f} PPU. Scale: {scale:.4f}"
+        )
 
         bmesh.update_edit_mesh(obj.data)
 
@@ -694,10 +657,9 @@ class PIXUNWRAP_OT_unwrap_grid(bpy.types.Operator):
         return poll_edit_mode_selected_faces_uvsync(context)
 
     def execute(self, context):
-
         target_density = context.scene.pixunwrap_texel_density
 
-        obj = bpy.context.view_layer.objects.active
+        obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
 
@@ -709,7 +671,8 @@ class PIXUNWRAP_OT_unwrap_grid(bpy.types.Operator):
             # )
 
             try:
-                texture_size = get_texture_size_for_faces(context, obj, quad_group + connected_non_quads)
+                texture = get_texture_for_faces(obj, quad_group + connected_non_quads)
+                texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
             except MultipleMaterialsError as e:
                 self.report({"ERROR"}, str(e))
                 return {"CANCELLED"}
@@ -776,7 +739,7 @@ class PIXUNWRAP_OT_unwrap_grid(bpy.types.Operator):
 #     def execute(self, context):
 #         self.find_texture(context)
 #
-#         obj = bpy.context.view_layer.objects.active
+#         obj = context.edit_object
 #         bm = bmesh.from_edit_mesh(obj.data)
 #         uv_layer = bm.loops.layers.uv.verify()
 #
@@ -812,17 +775,17 @@ class PIXUNWRAP_OT_unwrap_basic(bpy.types.Operator):
         return poll_edit_mode_selected_faces_uvsync(context)
 
     def execute(self, context):
-
         target_density = context.scene.pixunwrap_texel_density
 
-        obj = bpy.context.view_layer.objects.active
+        obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
 
         selected_faces = list(face for face in bm.faces if face.select)
 
         try:
-            texture_size = get_texture_size_for_faces(context, obj, selected_faces)
+            texture = get_texture_for_faces(obj, selected_faces)
+            texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
         except MultipleMaterialsError as e:
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
@@ -838,9 +801,7 @@ class PIXUNWRAP_OT_unwrap_basic(bpy.types.Operator):
         )
 
         # Scale to texel density
-        uvs_scale_texel_density(
-            bm, selected_faces, uv_layer, texture_size, target_density
-        )
+        uvs_scale_texel_density(bm, selected_faces, uv_layer, texture_size, target_density)
 
         # Round the total size of the island to a whole number of pixels
         island = UVIsland(selected_faces, bm, uv_layer)
@@ -865,7 +826,7 @@ class PIXUNWRAP_OT_unwrap_basic(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXUNWRAP_OT_unwrap_single_pixel(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_unwrap_single_pixel(bpy.types.Operator):
     """Unwraps the selected faces to a single pixel, so they always
     have the same color when painting"""
 
@@ -873,16 +834,24 @@ class PIXUNWRAP_OT_unwrap_single_pixel(TextureOperator, bpy.types.Operator):
     bl_label = "Single Pixel (Fill)"
     bl_options = {"UNDO"}
 
+    @classmethod
+    def poll(cls, context):
+        return poll_edit_mode_selected_faces_uvsync(context)
+
     def execute(self, context):
-        self.find_texture(context)
-
-        # bpy.ops.uv.select_split()
-
-        obj = bpy.context.view_layer.objects.active
+        obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
 
         selected_faces = list(face for face in bm.faces if face.select)
+
+        try:
+            texture = get_texture_for_faces(obj, selected_faces)
+            texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
+        except MultipleMaterialsError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+
         uvs_pin(selected_faces, uv_layer, False)
 
         bpy.ops.uv.unwrap(
@@ -893,26 +862,23 @@ class PIXUNWRAP_OT_unwrap_single_pixel(TextureOperator, bpy.types.Operator):
             margin=0.01,
         )
 
-        target_size = 1.0 / self.texture_size
+        target_size = 1.0 / texture_size
 
         def vert_pos(v, v_total):
-            # a = pi * 2 * v / v_total
-
             f = floor(v * 4 / v_total) / 4.0
-            print(f)
             # Start at 45 degrees
-            a = pi * 2 * (f + .125)
+            a = pi * 2 * (f + 0.125)
 
             # Make the island ALMOST fill the texture pixel,
             # when moving with snapping on, this will actually snap
             # to pixel corners, so then we still need bleed on the texture, but eh.
-            radius = sqrt(.49)
+            radius = sqrt(0.49)
             return Vector((radius * cos(a) + 0.5, radius * sin(a) + 0.5))
 
         for face in selected_faces:
             v_count = len(face.loops)
-            for v, loop in enumerate(face.loops):
-                p = vert_pos(v, v_count) * target_size
+            for vert, loop in enumerate(face.loops):
+                p = vert_pos(vert, v_count) * target_size
                 loop[uv_layer].uv = p
 
         uvs_pin(selected_faces, uv_layer, True)
@@ -955,7 +921,7 @@ class PIXUNWRAP_OT_uv_grid_fold(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXUNWRAP_OT_uv_flip(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_uv_flip(bpy.types.Operator):
     """Flip the Selection"""
 
     bl_idname = "view3d.pixunwrap_uv_flip"
@@ -970,8 +936,11 @@ class PIXUNWRAP_OT_uv_flip(TextureOperator, bpy.types.Operator):
     flip_axis: bpy.props.EnumProperty(items=FlipAxis, name="Flip Axis")
     modify_texture: bpy.props.BoolProperty(default=False, name="Modify Texture")
 
+    @classmethod
+    def poll(cls, context):
+        return poll_edit_mode_selected_faces_uvsync(context)
+
     def execute(self, context):
-        self.find_texture(context)
         obj = context.view_layer.objects.active
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
@@ -980,10 +949,15 @@ class PIXUNWRAP_OT_uv_flip(TextureOperator, bpy.types.Operator):
         islands = get_islands_from_obj(obj, True)
         islands = merge_overlapping_islands(islands)
 
-        texture = get_first_texture_on_object(obj)
-
         for island in islands:
-            island_rect = island.calc_pixel_bounds(self.texture_size)
+            try:
+                texture = get_texture_for_faces(obj, island.get_faces())
+                texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
+            except MultipleMaterialsError as e:
+                self.report({"ERROR"}, str(e))
+                return {"CANCELLED"}
+
+            island_rect = island.calc_pixel_bounds(texture_size)
 
             # `matrix` is the matrix used for transforming texture pixels,
             # `matrix_uv` is the matrix used for transforming uv coords
@@ -996,18 +970,18 @@ class PIXUNWRAP_OT_uv_flip(TextureOperator, bpy.types.Operator):
 
             matrix_pin_pivot(matrix, pivot)
 
-            matrix_uv = get_uv_space_matrix(matrix, self.texture_size)
+            matrix_uv = get_uv_space_matrix(matrix, texture_size)
 
             uvs_transform(island.get_faces(), uv_layer, matrix_uv)
 
-            if self.modify_texture:
+            if self.modify_texture and texture is not None:
                 copy_texture_region_transformed(texture, island_rect, matrix)
 
         bmesh.update_edit_mesh(obj.data)
         return {"FINISHED"}
 
 
-class PIXUNWRAP_OT_uv_rot_90(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_uv_rot_90(bpy.types.Operator):
     """Rotate UVs of Selection 90 degrees (CCW)"""
 
     bl_idname = "view3d.pixunwrap_uv_rot_90"
@@ -1016,25 +990,32 @@ class PIXUNWRAP_OT_uv_rot_90(TextureOperator, bpy.types.Operator):
 
     modify_texture: bpy.props.BoolProperty(default=False, name="Modify Texture")
 
+    @classmethod
+    def poll(cls, context):
+        return poll_edit_mode_selected_faces_uvsync(context)
+
     def execute(self, context):
         bpy.ops.ed.undo_push()
 
-        self.find_texture(context)
-
-        obj = context.edit_object
+        obj = context.view_layer.objects.active
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
-
-        texture_rect = RectInt(Vector2Int(0, 0), Vector2Int(self.texture_size, self.texture_size))
 
         # FIND ISLANDS
         islands = get_islands_from_obj(obj, True)
         islands = merge_overlapping_islands(islands)
 
-        texture = get_first_texture_on_object(obj)
-
         for island in islands:
-            island_rect = island.calc_pixel_bounds(self.texture_size)
+            try:
+                texture = get_texture_for_faces(obj, island.get_faces())
+                texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
+            except MultipleMaterialsError as e:
+                self.report({"ERROR"}, str(e))
+                return {"CANCELLED"}
+
+            texture_rect = RectInt(Vector2Int(0, 0), Vector2Int(texture_size, texture_size))
+
+            island_rect = island.calc_pixel_bounds(texture_size)
 
             matrix = Matrix.Rotation(radians(90), 2).to_3x3()
             h = island_rect.size.y / 2
@@ -1042,7 +1023,7 @@ class PIXUNWRAP_OT_uv_rot_90(TextureOperator, bpy.types.Operator):
 
             matrix_pin_pivot(matrix, pivot)
 
-            matrix_uv = get_uv_space_matrix(matrix, self.texture_size)
+            matrix_uv = get_uv_space_matrix(matrix, texture_size)
             uvs_transform(island.get_faces(), uv_layer, matrix_uv)
 
             # When rotating, the bounds change, so we need to find some
@@ -1052,9 +1033,9 @@ class PIXUNWRAP_OT_uv_rot_90(TextureOperator, bpy.types.Operator):
             # but we do the TEXTURE modification afterwards, for the
             # entire transformation in one (rotate + move to free space)
             old_pos = island_rect.min
-            bpy.ops.view3d.pixunwrap_island_to_free_space(modify_texture=False)
+            bpy.ops.view3d.pixunwrap_island_to_free_space(modify_texture=False, prefer_current_position=True)
             island.update_min_max()
-            new_rect = island.calc_pixel_bounds(self.texture_size)
+            new_rect = island.calc_pixel_bounds(texture_size)
             new_pos = new_rect.min
 
             offset = new_pos - old_pos
@@ -1079,77 +1060,107 @@ class PIXUNWRAP_OT_uv_rot_90(TextureOperator, bpy.types.Operator):
         return {"FINISHED"}
 
 
-class PIXUNWRAP_OT_stack_islands(TextureOperator, bpy.types.Operator):
-    """Move all selected islands to the position of the first island"""
+class PIXUNWRAP_OT_stack_islands(bpy.types.Operator):
+    """Move all selected islands to the position of the island containing the *active* face"""
+
     bl_idname = "view3d.pixunwrap_stack_islands"
     bl_label = "Stack Islands"
     bl_options = {"UNDO"}
 
+    @classmethod
+    def poll(cls, context):
+        return poll_edit_mode_selected_faces_uvsync(context)
+
     def execute(self, context):
         bpy.ops.ed.undo_push()
-
-        self.find_texture(context)
 
         obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
 
+        active_face = bm.faces.active  # Get the active face
+
+        if not active_face or not active_face.select:
+            self.report({"ERROR"}, "No active face selected")
+            return {"CANCELLED"}
+
+        try:
+            texture = get_texture_for_faces(obj, (face for face in bm.faces if face.select))
+            texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
+        except MultipleMaterialsError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+
         # FIND ISLANDS
         islands = get_islands_from_obj(obj, True)
 
-        if (len(islands) > 1):
-            first_island = islands[0]
-            island_rect = first_island.calc_pixel_bounds(self.texture_size)
+        if len(islands) > 1:
+            # Find which island contains the active face
+            active_island = next((island for island in islands if active_face in island.get_faces()), None)
+
+            if not active_island:
+                self.report({"ERROR"}, "Active face not found in UV islands")
+                return {"CANCELLED"}
+
+            island_rect = active_island.calc_pixel_bounds(texture_size)
             x = island_rect.min.x
             y = island_rect.min.y
 
-            for other_island in islands[1:]:
-                other_island_rect = other_island.calc_pixel_bounds(self.texture_size)
-                tx = (x - other_island_rect.min.x) / self.texture_size
-                ty = (y - other_island_rect.min.y) / self.texture_size
+            # Move all other islands to this position
+            for other_island in islands:
+                if other_island is not active_island:  # Skip the active island
+                    other_island_rect = other_island.calc_pixel_bounds(texture_size)
+                    tx = (x - other_island_rect.min.x) / texture_size
+                    ty = (y - other_island_rect.min.y) / texture_size
 
-                matrix_uv = Matrix.Translation(Vector((tx, ty, 0)))
-                uvs_transform(other_island.get_faces(), uv_layer, matrix_uv)
+                    matrix_uv = Matrix.Translation(Vector((tx, ty, 0)))
+                    uvs_transform(other_island.get_faces(), uv_layer, matrix_uv)
 
         bmesh.update_edit_mesh(obj.data)
         return {"FINISHED"}
 
 
-class PIXUNWRAP_OT_nudge_islands(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_nudge_islands(bpy.types.Operator):
     """Move selected islands by the set number of pixels"""
 
     bl_idname = "view3d.pixunwrap_nudge_islands"
     bl_label = "Nudge Islands"
     bl_options = {"UNDO", "REGISTER"}
 
-    move_x: bpy.props.IntProperty(name="Move X", default=1, min=-32, max=32)
-    move_y: bpy.props.IntProperty(name="Move Y", default=0, min=-32, max=32)
+    move_x: bpy.props.IntProperty(name="Move X", default=1, min=-128, max=128)
+    move_y: bpy.props.IntProperty(name="Move Y", default=0, min=-128, max=128)
+
+    @classmethod
+    def poll(cls, context):
+        return poll_edit_mode_selected_faces_uvsync(context)
 
     def execute(self, context):
         bpy.ops.ed.undo_push()
-
-        self.find_texture(context)
 
         obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
 
-        # FIND ISLANDS
-        islands = get_islands_from_obj(obj, True)
+        selected_faces = [face for face in bm.faces if face.select]
+        try:
+            texture = get_texture_for_faces(obj, selected_faces)
+            texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
+        except MultipleMaterialsError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
 
-        for island in islands:
-            island_rect = island.calc_pixel_bounds(self.texture_size)
-            tx = self.move_x / self.texture_size
-            ty = self.move_y / self.texture_size
+        tx = self.move_x / texture_size
+        ty = self.move_y / texture_size
 
-            matrix_uv = Matrix.Translation(Vector((tx, ty, 0)))
-            uvs_transform(island.get_faces(), uv_layer, matrix_uv)
+        matrix_uv = Matrix.Translation(Vector((tx, ty, 0)))
+
+        uvs_transform(selected_faces, uv_layer, matrix_uv)
 
         bmesh.update_edit_mesh(obj.data)
         return {"FINISHED"}
 
 
-class PIXUNWRAP_OT_randomize_islands(TextureOperator, bpy.types.Operator):
+class PIXUNWRAP_OT_randomize_islands(bpy.types.Operator):
     """Move the selected islands to random positions inside the UV bounds"""
 
     bl_idname = "view3d.pixunwrap_randomize_islands"
@@ -1161,33 +1172,43 @@ class PIXUNWRAP_OT_randomize_islands(TextureOperator, bpy.types.Operator):
     y_min: bpy.props.FloatProperty(name="Y Min", default=0, min=0, max=1)
     y_max: bpy.props.FloatProperty(name="Y Max", default=1, min=0, max=1)
 
+    @classmethod
+    def poll(cls, context):
+        return poll_edit_mode_selected_faces_uvsync(context)
+
     def execute(self, context):
         bpy.ops.ed.undo_push()
-
-        self.find_texture(context)
 
         obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
         uv_layer = bm.loops.layers.uv.verify()
 
-        min_x = floor(self.texture_size * self.x_min)
-        min_y = floor(self.texture_size * self.y_min)
+        selected_faces = [face for face in bm.faces if face.select]
+        try:
+            texture = get_texture_for_faces(obj, selected_faces)
+            texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
+        except MultipleMaterialsError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+
+        min_x = floor(texture_size * self.x_min)
+        min_y = floor(texture_size * self.y_min)
 
         # ensure no negative coords
-        max_x_bound = ceil(self.texture_size * self.x_max)
-        max_y_bound = ceil(self.texture_size * self.y_max)
+        max_x_bound = ceil(texture_size * self.x_max)
+        max_y_bound = ceil(texture_size * self.y_max)
 
         # FIND ISLANDS
         islands = get_islands_from_obj(obj, True)
 
         for island in islands:
-            island_rect = island.calc_pixel_bounds(self.texture_size)
+            island_rect = island.calc_pixel_bounds(texture_size)
 
             max_x = max(min_x, max_x_bound - island_rect.size.x)
             max_y = max(min_y, max_y_bound - island_rect.size.y)
 
-            tx = (random.randint(min_x, max_x) - island_rect.min.x) / self.texture_size
-            ty = (random.randint(min_y, max_y) - island_rect.min.y) / self.texture_size
+            tx = (random.randint(min_x, max_x) - island_rect.min.x) / texture_size
+            ty = (random.randint(min_y, max_y) - island_rect.min.y) / texture_size
 
             matrix_uv = Matrix.Translation(Vector((tx, ty, 0)))
 
