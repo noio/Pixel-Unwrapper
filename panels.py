@@ -75,9 +75,6 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
             warning.alert = True  # Makes the text red
             warning.label(text="\"UV Sync Selection\" must be enabled", icon='ERROR')
 
-        if bpy.context.object is None or bpy.context.object.mode != "EDIT":
-            box.enabled = False
-
         col = box.column(align=False)
         col.scale_y = 1.5
         col.operator("view3d.pixunwrap_unwrap_grid", icon="VIEW_ORTHO")
@@ -85,18 +82,12 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         # col.operator("view3d.pixunwrap_unwrap_extend", icon="SELECT_SUBTRACT")
         col.operator("view3d.pixunwrap_unwrap_single_pixel", icon="GPBRUSH_FILL")
 
-        # row = col.row()
-        # row.operator("view3d.pixunwrap_unwrap_single_pixel", icon="COPYDOWN")
-        # row.operator("view3d.pixunwrap_unwrap_single_pixel", icon="PASTEDOWN")
 
         #  __  __    ___               __
         # |__ |  \ |  |     |  | \  / (__'
         # |__ |__/ |  |     \__/  \/  .__)
         #
         box = layout.box()
-        if bpy.context.object is None or bpy.context.object.mode != "EDIT":
-            box.enabled = False
-
 
         header = box.row()
         header.label(text="UV Editing")
@@ -233,8 +224,4 @@ class PIXUNWRAP_PT_paint_tools(bpy.types.Panel):
         box = layout.box()
         box.label(text="Texture Paint Tools")
         col = box.column(align=True)
-
-        if bpy.context.object is None or bpy.context.object.mode != "TEXTURE_PAINT":
-            box.enabled = False
-
         col.operator("view3d.pixunwrap_swap_eraser", icon="GPBRUSH_ERASE_HARD")

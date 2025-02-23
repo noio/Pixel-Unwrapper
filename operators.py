@@ -37,7 +37,7 @@ class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         obj = context.view_layer.objects.active
-        return get_first_texture_on_object(obj) is None
+        return obj is not None and get_first_texture_on_object(obj) is None
 
     def invoke(self, context, event):
         self.texture_size = context.scene.pixunwrap_default_texture_size
@@ -109,7 +109,7 @@ class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         obj = context.view_layer.objects.active
-        return get_first_texture_on_object(obj) is not None
+        return obj is not None and get_first_texture_on_object(obj) is not None
 
     def invoke(self, context, event):
         self.new_name = context.view_layer.objects.active.name
@@ -360,6 +360,10 @@ class PIXUNWRAP_OT_swap_eraser(bpy.types.Operator):
     bl_label = "Toggle Erase Alpha"
     bl_options = {"UNDO"}
 
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None and context.object.mode == "TEXTURE_PAINT"
+
     def execute(self, context):
         if not hasattr(self, "previous_blend"):
             self.previous_blend = "MIX"
@@ -494,7 +498,6 @@ class PIXUNWRAP_OT_repack_uvs(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         return poll_edit_mode_selected_faces_uvsync(context)
-
 
     def execute(self, context):
         obj = context.edit_object
