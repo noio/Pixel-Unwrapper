@@ -1,6 +1,6 @@
-from math import ceil, floor
+from math import ceil, floor, fabs
 from collections import defaultdict
-from typing import Any
+from typing import Any, Optional, Generator
 
 import bmesh
 from bmesh.types import BMesh, BMFace
@@ -49,6 +49,7 @@ class UVIsland:
     max: Vector
     min: Vector
     average_uv: Vector
+
     # pixel_bounds: RectInt = None
     uv_layer: any
 
@@ -99,6 +100,7 @@ class UVIsland:
 
         return RectInt(mi, ma)
 
+
     def merge(self, other: "UVIsland"):
         self.max = elem_max(self.max, other.max)
         self.min = elem_min(self.min, other.min)
@@ -133,7 +135,20 @@ class UVIsland:
         return any(face[lock_layer] == 1 for face in self.get_faces())
 
 
-def get_islands_from_obj(obj, only_selected=True) -> "list[UVIsland]":
+def calc_tris_2d_area(points):
+    """From MagicUV"""
+    area = 0.0
+    for i, p1 in enumerate(points):
+        p2 = points[(i + 1) % len(points)]
+        v1 = p1 - points[0]
+        v2 = p2 - points[0]
+        a = v1.x * v2.y - v1.y * v2.x
+        area = area + a
+
+    return fabs(0.5 * area)
+
+
+def get_islands_from_obj(obj, only_selected=True) -> Optional[list[UVIsland]]:
     if obj.data.is_editmode:
         mesh = bmesh.from_edit_mesh(obj.data)
     else:
@@ -142,12 +157,9 @@ def get_islands_from_obj(obj, only_selected=True) -> "list[UVIsland]":
 
     mesh.faces.ensure_lookup_table()
 
-    return get_islands_from_mesh(mesh, only_selected)
-
-
-def get_islands_from_mesh(mesh: "BMesh", only_selected=True) -> "list[UVIsland]":
     if not mesh.loops.layers.uv:
         return None
+
     uv_layer = mesh.loops.layers.uv.verify()
 
     if only_selected:
@@ -158,11 +170,12 @@ def get_islands_from_mesh(mesh: "BMesh", only_selected=True) -> "list[UVIsland]"
     return get_islands_for_faces(mesh, selected_faces, uv_layer)
 
 
+
 def get_islands_for_faces(mesh: "BMesh", faces, uv_layer) -> "list[UVIsland]":
     # Build two lookups for
     # all verts that makes up a face
     # all faces using a vert
-    # Lookups are by INDEX'
+    # Lookups are by INDEX
     mesh.faces.ensure_lookup_table()
     face_to_verts = defaultdict(set)
     vert_to_faces = defaultdict(set)
@@ -174,12 +187,12 @@ def get_islands_for_faces(mesh: "BMesh", faces, uv_layer) -> "list[UVIsland]":
 
     all_face_indices = face_to_verts.keys()
 
-    def connected_faces(face_idx):
+    def get_connected_faces(face_idx):
         for vid in face_to_verts[face_idx]:
             for conn_face_idx in vert_to_faces[vid]:
                 yield conn_face_idx
 
-    face_idx_islands = get_connected_components(all_face_indices, connected_faces)
+    face_idx_islands = get_connected_components(all_face_indices, get_connected_faces)
     islands = []
     for face_idx_island in face_idx_islands:
         islands.append(
@@ -204,7 +217,7 @@ def merge_overlapping_islands(islands: "list[UVIsland]") -> "list[UVIsland]":
         j = i + 1
         while j < len(islands):
             island_j = islands[j]
-            # See if the islands's bounds overlap eachother
+            # See if the islands' bounds overlap each other
             if not (
                 island_j.min.x > island_i.max.x
                 or island_i.min.x > island_j.max.x
@@ -270,7 +283,7 @@ def find_quad_groups(faces):
     else:
         connected_non_quads = [non_quad_faces]
 
-    return (quad_groups, connected_non_quads)
+    return quad_groups, connected_non_quads
 
 
 def connected_faces(face):

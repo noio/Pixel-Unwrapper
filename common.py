@@ -4,9 +4,14 @@ from math import fabs, sqrt, radians
 
 from dataclasses import dataclass
 
+import bpy
 import bmesh
 from bmesh.types import BMFace, BMEdge, BMesh
 from mathutils import Vector, Matrix
+
+ERROR_MULTIPLE_MATERIALS = "Faces have different materials"
+ERROR_TEXTURE_DIRTY = f"Please save texture first, because undo doesn't work for textures."
+ERROR_NO_TEXTURE_SPACE = f"Not enough space to preserve texture data. Resize texture or turn off \"Modify Texture\""
 
 
 @dataclass(frozen=True)
@@ -245,7 +250,7 @@ def uvs_scale_texel_density(bm, faces, uv_layer, texture_size, target_density):
     current_density = sqrt(uv_face_area) / sqrt(mesh_face_area)
     scale = target_density / current_density
     uvs_translate_rotate_scale(faces, uv_layer, scale=scale)
-    return (current_density, scale)
+    return current_density, scale
 
 
 def uvs_pin(faces, uv_layer, pin=True):
@@ -328,11 +333,15 @@ def get_all_textures_on_object(obj):
     return textures
 
 
-def get_material_index_from_faces(faces):
+class MultipleMaterialsError(Exception):
+    ...
+
+
+def get_material_index_from_faces(faces: "list[BMFace]"):
     """
     Checks if same material index is used for all faces,
     if yes: returns it,
-    if no: returns None
+    if no: do what?!
     """
     mat_index = None
     for face in faces:
@@ -340,14 +349,31 @@ def get_material_index_from_faces(faces):
             mat_index = face.material_index
         else:
             if mat_index != face.material_index:
-                return None
+                return None # DO WHAT HERE?!
     
     return mat_index
-            
+
+
+def get_texture_size_for_faces(context, obj, faces):
+    """
+    Get appropriate texture size for faces.
+    Raises ValueError if faces have different materials.
+    """
+    material_index = get_material_index_from_faces(faces)
+    if material_index is None:
+        raise MultipleMaterialsError(ERROR_MULTIPLE_MATERIALS)
+
+    texture = get_texture_from_material_index(obj, material_index)
+    return (texture.size[0] if texture is not None
+            else context.scene.pixunwrap_default_texture_size)
+
 def get_texture_from_material_index(obj, material_index):
     """
     Gets first used texture on given material
     """
+    if len(obj.material_slots) < material_index - 1:
+        return None
+    
     mat = obj.material_slots[material_index].material
     if not mat:
         return None
@@ -362,6 +388,15 @@ def get_texture_from_material_index(obj, material_index):
         return None
     
     return textures[0]
+
+def get_all_objects_with_texture(context, texture) -> "list[bpy.types.Object]":
+    objects = []
+    for obj in context.view_layer.objects:
+        if obj.type == "MESH":
+            obj_textures = get_all_textures_on_object(obj)
+            if texture in obj_textures:
+                objects.append(obj)
+    return objects
 
 
 def find_textures_on_faces(obj, faces):
@@ -379,6 +414,19 @@ def find_textures_on_faces(obj, faces):
                     textures.append(node.image)
     
     return textures
+
+
+def is_out_of_bounds(texture_size, pos: "Vector2Int", size: "Vector2Int"):
+    max_coord = pos + size
+    if not (
+            pos.x >= 0
+            and max_coord.x <= texture_size
+            and pos.y >= 0
+            and max_coord.y <= texture_size
+    ):
+        return True
+    return False
+
 
 
 def dump(obj):

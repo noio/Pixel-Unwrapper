@@ -67,8 +67,6 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
 
 
 
-        
-
         # row = col.row(align=True)
 
         #                     __    _    __   __          __
@@ -78,12 +76,18 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         box = layout.box()
         box.label(text="Unwrapping")
 
+        # Add UV sync warning
+        if not context.scene.tool_settings.use_uv_select_sync:
+            warning = box.row()
+            warning.alert = True  # Makes the text red
+            warning.label(text="Enable UV Sync Selection", icon='ERROR')
+
         if bpy.context.object is None or bpy.context.object.mode != "EDIT":
             box.enabled = False
 
         col = box.column(align=False)
         col.scale_y =1.5
-        col.operator("view3d.pixunwrap_unwrap_pixel_grid", icon="VIEW_ORTHO")
+        col.operator("view3d.pixunwrap_unwrap_grid", icon="VIEW_ORTHO")
         col.operator("view3d.pixunwrap_unwrap_basic", icon="SELECT_SET")
         # col.operator("view3d.pixunwrap_unwrap_extend", icon="SELECT_SUBTRACT")
         col.operator("view3d.pixunwrap_unwrap_single_pixel", icon="GPBRUSH_FILL")
