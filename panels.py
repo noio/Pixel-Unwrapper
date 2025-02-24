@@ -158,6 +158,10 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
 
         row = col.row(align=True)
         row.enabled = not modify_texture
+        op = row.operator("view3d.pixunwrap_hotspot", icon="MESH_PLANE")
+
+        row = col.row(align=True)
+        row.enabled = not modify_texture
         op = row.operator("view3d.pixunwrap_nudge_islands", icon="BACK", text="")
         op.move_x = -1
         op.move_y = 0

@@ -1072,7 +1072,6 @@ class PIXUNWRAP_OT_rectify(bpy.types.Operator):
 
     deform_power: bpy.props.FloatProperty(default=4, name="Deform Power")
 
-
     @classmethod
     def poll(cls, context):
         return poll_edit_mode_selected_faces_uvsync(context)
@@ -1111,59 +1110,44 @@ class PIXUNWRAP_OT_rectify(bpy.types.Operator):
             # Track all moved vertices and their movements
             moved_verts = {}  # vert -> (original_uv, new_uv)
 
-            print("MOVING CORNERS")
+            # print("MOVING CORNERS")
 
             # First move corners to their rectangle positions
             for i, (vert, original_uv) in enumerate(corner_points):
                 new_uv = corner_uvs[i]
                 moved_verts[vert] = (original_uv.copy(), new_uv)
                 for loop in island.get_loops_for_vert(vert):
-                    print(f"moving corner vert v{vert.index} {original_uv} to {new_uv}")
+                    # print(f"moving corner vert v{vert.index} {original_uv} to {new_uv}")
                     loop[uv_layer].uv = new_uv
 
-            print("Moved Verts:")
-            for moved_vert, (before, after) in moved_verts.items():
-                print(f"v{moved_vert.index} moved from {before} => {after}")
+            # print("Moved Verts:")
+            # for moved_vert, (before, after) in moved_verts.items():
+            #     print(f"v{moved_vert.index} moved from {before} => {after}")
 
-            print("MOVING EDGES")
-            print(f"Full boundary: {[v.index for (v,_) in longest_loop]}")
+            # print("MOVING EDGES")
+            # print(f"Full boundary: {[v.index for (v,_) in longest_loop]}")
             # Now handle points between corners
             # We need to process each edge of our rectangle
             for i in range(len(corner_indices)):
                 start_idx = corner_indices[i]
                 end_idx = corner_indices[(i + 1) % len(corner_indices)]
 
-                # if end_idx < start_idx:
-                #     # Find next corner after start_idx
-                #     print(
-                #         f"Wrapping around: points after {start_idx + 1}: {[v[0].index for v in longest_loop[start_idx + 1:]]}")
-                #     print(f"Plus points before {end_idx}: {[v[0].index for v in longest_loop[0:end_idx]]}")
-                #     next_corner = min(corner_indices, key=lambda x: x if x > start_idx else float('inf'))
-                #     between_points = longest_loop[start_idx + 1:next_corner] + longest_loop[0:end_idx]
-                # else:
-                #     print(
-                #         f"Direct slice {start_idx + 1}:{end_idx}: {[v[0].index for v in longest_loop[start_idx + 1:end_idx]]}")
-                #     between_points = longest_loop[start_idx + 1:end_idx]
-
                 # Get points between these corners (handling loop wraparound if needed)
                 if end_idx < start_idx:
-                    between_points = longest_loop[start_idx + 1:] + longest_loop[0:end_idx]
+                    between_points = longest_loop[start_idx + 1 :] + longest_loop[0:end_idx]
                 else:
-                    between_points = longest_loop[start_idx + 1: end_idx]
+                    between_points = longest_loop[start_idx + 1 : end_idx]
 
-                print(f"Aligning Edge Points {[v.index for (v,_) in between_points]}")
+                # print(f"Aligning Edge Points {[v.index for (v,_) in between_points]}")
 
                 # For each point between corners, snap to closest rectangle edge
                 for vert, original_uv in between_points:
                     new_uv = get_nearest_point_on_rectangle(original_uv, min_uv, max_uv)
-                    print(f"moving edge vert v{vert.index} {original_uv} to {new_uv}")
+                    # print(f"moving edge vert v{vert.index} {original_uv} to {new_uv}")
 
                     for loop in island.get_loops_for_vert(vert):
                         moved_verts[vert] = (original_uv.copy(), new_uv)
                         loop[uv_layer].uv = new_uv
-
-            for moved_vert, (before, after) in moved_verts.items():
-                print(f"v{moved_vert.index} moved from {before} => {after}")
 
             # Now adjust all other vertices based on weighted influence
             for face in island.uv_faces:
@@ -1181,7 +1165,7 @@ class PIXUNWRAP_OT_rectify(bpy.types.Operator):
                                 dist = 0.0001
 
                             # Weight is inverse of distance squared
-                            weight = 1.0 / (dist ** self.deform_power)
+                            weight = 1.0 / (dist**self.deform_power)
                             delta = new_uv - original_uv
 
                             weighted_delta += delta * weight
@@ -1194,6 +1178,145 @@ class PIXUNWRAP_OT_rectify(bpy.types.Operator):
 
         bmesh.update_edit_mesh(obj.data)
         return {"FINISHED"}
+
+
+class PIXUNWRAP_OT_hotspot(bpy.types.Operator):
+    """Map selected UV island onto a hotspot using the uv island bounds as a rectangle"""
+
+    bl_idname = "view3d.pixunwrap_hotspot"
+    bl_label = "Hotspot"
+    bl_options = {"UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return poll_edit_mode_selected_faces_uvsync(context)
+
+    def execute(self, context):
+        obj = context.edit_object
+        bm = bmesh.from_edit_mesh(obj.data)
+        uv_layer = bm.loops.layers.uv.verify()
+        selected_faces = [face for face in bm.faces if face.select]
+
+        material_index = get_material_index_from_faces(selected_faces)
+        if material_index is None:
+            self.report({"ERROR"}, ERROR_MULTIPLE_MATERIALS)
+            return {"CANCELLED"}
+        texture = get_texture_from_material_index(obj, material_index)
+        texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
+
+        # FIND THE HOTSPOT OBJECT
+        if material_index >= len(obj.material_slots):
+            self.report({"ERROR"}, "Selected faces have no material")
+            return {"CANCELLED"}
+
+        material = obj.material_slots[material_index].material
+        material_name = material.name
+        # Find any object that has "hotspots" in name and uses this material
+        hotspot_obj = None
+        for other_obj in bpy.data.objects:
+            obj_material = other_obj.material_slots[0].material if other_obj.material_slots else None
+            if "hotspots" in other_obj.name.lower() and obj_material == material:
+                hotspot_obj = other_obj
+                break
+
+        if not hotspot_obj:
+            self.report({"ERROR"}, f"No object found that uses {material_name} and has 'hotspots' in the name")
+            return {"CANCELLED"}
+
+        island = UVIsland(selected_faces, bm, uv_layer)
+        island_size = island.max - island.min
+        hotspot_bounds = self.get_hotspot_uv_bounds(hotspot_obj)
+
+        best_bounds = []  # List of (position, size, flipped) tuples
+        best_diff = float("inf")
+        size_threshold = 1.0 / texture_size  # Threshold for "similar enough" sizes
+
+        for position, size in hotspot_bounds:
+            # Check both normal and transposed orientations
+            sizes_to_check = [
+                (size, False),  # Normal orientation
+                (Vector((size.y, size.x)), True)  # Transposed
+            ]
+
+            for check_size, is_flipped in sizes_to_check:
+                size_diff = (check_size - island_size).length
+                # print(f"{island_size=} {check_size=} {size_diff=} {is_flipped=}")
+
+                if size_diff < best_diff - size_threshold:
+                    # Found much better match, clear list and start new
+                    best_bounds = [(position, size, is_flipped)]
+                    best_diff = size_diff
+                elif abs(size_diff - best_diff) <= size_threshold:
+                    # Similar enough to best, add to candidates
+                    best_bounds.append((position, size, is_flipped))
+
+        if best_bounds:
+            print(f"picking from {len(best_bounds)}")
+            # Pick random candidate
+            position, size, is_flipped = random.choice(best_bounds)
+
+
+            # Calculate centers
+            island_center = island.min + island_size / 2
+            hotspot_center = position + size / 2
+
+            # Apply transformations in logical order
+            # 1. Translate island center to origin
+            to_origin = Matrix.Identity(3)
+            to_origin[0][2] = -island_center.x  # X translation in 3rd column, 1st row
+            to_origin[1][2] = -island_center.y  # Y translation in 3rd column, 2nd row
+            matrix = to_origin
+
+            # 3. Rotate (if needed)
+            if is_flipped:
+                matrix = Matrix.Rotation(radians(90), 3, 'Z') @ matrix
+                island_size.x, island_size.y = island_size.y, island_size.x
+
+
+            # Scale factors - same regardless of flipped state
+            scale_x = size.x / island_size.x if island_size.x != 0 else 1
+            scale_y = size.y / island_size.y if island_size.y != 0 else 1
+
+            # 2. Scale
+            matrix = Matrix.Scale(scale_x, 3, Vector((1, 0, 0))) @ matrix
+            matrix = Matrix.Scale(scale_y, 3, Vector((0, 1, 0))) @ matrix
+
+            # 4. Translate to hotspot center
+            to_center = Matrix.Identity(3)
+            to_center[0][2] = hotspot_center.x  # X translation in 3rd column, 1st row
+            to_center[1][2] = hotspot_center.y  # Y translation in 3rd column, 2nd row
+            matrix =  to_center @ matrix
+
+            uvs_transform(island.get_faces(), uv_layer, matrix)
+
+        bmesh.update_edit_mesh(obj.data)
+        return {"FINISHED"}
+
+        # min_uv = Vector((round(island.min.x * texture_size), round(island.min.y * texture_size))) / texture_size
+        # max_uv = Vector((round(island.max.x * texture_size), round(island.max.y * texture_size))) / texture_size
+
+    @staticmethod
+    def get_hotspot_uv_bounds(obj):
+        """Returns a list of (position, size) tuples for each face's UV bounds"""
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        uv_layer = bm.loops.layers.uv.verify()
+
+        bounds = []
+        for face in bm.faces:
+            uvs = [loop[uv_layer].uv for loop in face.loops]
+            if not uvs:
+                continue
+
+            min_uv = Vector((min(uv.x for uv in uvs), min(uv.y for uv in uvs)))
+            max_uv = Vector((max(uv.x for uv in uvs), max(uv.y for uv in uvs)))
+
+            position = min_uv
+            size = max_uv - min_uv
+            bounds.append((position, size))
+
+        bm.free()
+        return bounds
 
 
 class PIXUNWRAP_OT_stack_islands(bpy.types.Operator):

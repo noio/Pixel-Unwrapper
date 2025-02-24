@@ -182,6 +182,14 @@ def vert_between_edges(edge_a, edge_b):
     elif edge_a.verts[1] in edge_b.verts:
         return edge_a.verts[1]
 
+def pv(v, precision=3):
+    """Format a vector with specified precision for all components."""
+    if hasattr(v, "__iter__"):
+        components = [f"{x:.{precision}f}" for x in v]
+        return f"({', '.join(components)})"
+    else:
+        # Handle case where input might not be a vector
+        return str(v)
 
 def get_uv_space_matrix(matrix: Matrix, texture_size):
     scale_up = Matrix.Scale(texture_size, 3)
@@ -397,6 +405,9 @@ def get_texture_for_faces(obj, faces):
     if material_index is None:
         raise MultipleMaterialsError(ERROR_MULTIPLE_MATERIALS)
 
+    return get_texture_from_material_index(obj, material_index)
+
+def get_texture_from_material_index(obj, material_index):
     # Early returns if no valid material
     if len(obj.material_slots) < material_index - 1:
         return None
