@@ -10,6 +10,10 @@ from mathutils import Vector
 from .common import LOCK_ORIENTATION_ATTRIBUTE, Vector2Int, RectInt, any_pinned, elem_max, elem_min
 
 
+class BoundaryNotFoundError(Exception):
+    ...
+
+
 class UVFace:
     face: any
     min: Vector = Vector((0, 0))
@@ -71,9 +75,7 @@ class UVIsland:
         for face in self.uv_faces:
             face.calc_info()
 
-            self.average_uv += sum(
-                (l[self.uv_layer].uv for l in face.face.loops), Vector((0, 0))
-            )
+            self.average_uv += sum((l[self.uv_layer].uv for l in face.face.loops), Vector((0, 0)))
             self.num_uv += len(face.face.loops)
 
             self.max.x = max(face.max.x, self.max.x)
@@ -100,15 +102,14 @@ class UVIsland:
 
         return RectInt(mi, ma)
 
-
     def merge(self, other: "UVIsland"):
         self.max = elem_max(self.max, other.max)
         self.min = elem_min(self.min, other.min)
 
         # Weight the center by UV counts (as the center is the average vert uv coord)
-        self.average_uv = (
-            (self.average_uv * self.num_uv) + (other.average_uv * other.num_uv)
-        ) / (self.num_uv + other.num_uv)
+        self.average_uv = ((self.average_uv * self.num_uv) + (other.average_uv * other.num_uv)) / (
+            self.num_uv + other.num_uv
+        )
 
         self.uv_faces.extend(other.uv_faces)
         self.num_uv += other.num_uv
@@ -118,6 +119,87 @@ class UVIsland:
 
     def get_faces(self):
         return (uv_face.face for uv_face in self.uv_faces)
+
+    def get_loops_for_vert(self, vert):
+        """Returns all UV loops for a given vertex in this island."""
+        loops = []
+        for face in self.uv_faces:
+            for loop in face.face.loops:
+                if loop.vert == vert:
+                    loops.append(loop)
+        return loops
+
+    def get_boundary_loops(self):
+        """Returns list of ordered vertex loops that form UV island boundaries."""
+        # Get boundary edges as before
+        edge_face_count = {}
+        for face in self.uv_faces:
+            for edge in face.face.edges:
+                edge_face_count[edge] = edge_face_count.get(edge, 0) + 1
+
+        boundary_edges = set(edge for edge, count in edge_face_count.items() if count == 1)
+
+        # Build connectivity map
+        # vert_connections is a dictionary of sets with all verts each vert is connected to
+        vert_connections = {}
+        for edge in boundary_edges:
+            v1, v2 = edge.verts
+            vert_connections.setdefault(v1, set()).add(v2)
+            vert_connections.setdefault(v2, set()).add(v1)
+
+        # Find all loops
+        loops = []
+        remaining_edges = boundary_edges.copy()
+
+        while remaining_edges:
+            # Start new loop from any remaining edge
+            start_edge = next(iter(remaining_edges))
+            start_vert = start_edge.verts[0]
+            current_loop = [start_vert]
+            current = start_vert
+
+            # Walk until we close the loop
+            while True:
+                # We really just follow ANY connection?
+                connected_to_current = vert_connections[current]
+                next_vert = next(v for v in connected_to_current if len(current_loop) < 2 or v != current_loop[-2])
+
+                try:
+                    # Remove edges as we use them
+                    edge_to_remove = next(e for e in remaining_edges if current in e.verts and next_vert in e.verts)
+                    remaining_edges.remove(edge_to_remove)
+
+                    # print(f"e{edge_to_remove.index} = (v{current.index} => v{next_vert.index}) ({len(remaining_edges)} remaining)")
+
+                    current_loop.append(next_vert)
+                    current = next_vert
+                except StopIteration:
+                    break
+
+            if current_loop[0] != current_loop[-1]:
+                raise ValueError("Boundary edges do not form loop")
+            del current_loop[-1]
+            loops.append(current_loop)
+
+        # Convert loops to (vert, uv) pairs
+        uv_layer = self.mesh.loops.layers.uv.verify()
+        loops_with_uvs = []
+
+        for loop in loops:
+            loop_with_uvs = []
+            for vert in loop:
+                # Find UV for this vert
+                for face in self.uv_faces:
+                    for l in face.face.loops:
+                        if l.vert == vert:
+                            uv = l[uv_layer].uv.copy()
+                            loop_with_uvs.append((vert, uv))
+                            break
+                    if len(loop_with_uvs) > 0 and loop_with_uvs[-1][0] == vert:
+                        break
+            loops_with_uvs.append(loop_with_uvs)
+
+        return loops_with_uvs
 
     def is_any_pinned(self):
         return any_pinned(self.get_faces(), self.mesh.loops.layers.uv.verify())
@@ -168,7 +250,6 @@ def get_islands_from_obj(obj, only_selected=True) -> Optional[list[UVIsland]]:
         selected_faces = [f for f in mesh.faces]
 
     return get_islands_for_faces(mesh, selected_faces, uv_layer)
-
 
 
 def get_islands_for_faces(mesh: "BMesh", faces, uv_layer) -> "list[UVIsland]":
@@ -302,9 +383,7 @@ def find_closest_group(faces, groups):
         closest = -1
         for i, group in enumerate(groups):
             for group_face in group:
-                dist = (
-                    face.calc_center_bounds() - group_face.calc_center_bounds()
-                ).length_squared
+                dist = (face.calc_center_bounds() - group_face.calc_center_bounds()).length_squared
                 print(f"distance to {i}/{group_face.index} is {dist}")
                 if dist < closest_dist:
                     closest_dist = dist
@@ -313,3 +392,78 @@ def find_closest_group(faces, groups):
         print(f"Closest distance was {closest_dist} for group {closest}")
         output[closest].append(face)
     return output
+
+
+def calculate_loop_length(loop):
+    """Calculate total UV-space length of a loop of (vert, uv) pairs"""
+    total_length = 0
+    for i in range(len(loop)):
+        _, uv1 = loop[i]
+        _, uv2 = loop[(i + 1) % len(loop)]
+        total_length += (uv1 - uv2).length
+    return total_length
+
+
+def find_corner_points(loop, corners):
+    """
+    Find 4 points in the loop closest to any corner of the bounding rectangle.
+    Returns (corner_points, corner_indices) where both lists are in boundary-walking order.
+    Validates that corners aren't twisted (indices should be monotonic in the loop).
+    """
+
+
+    # Find all point-to-corner distances
+    distances = []  # [(loop_idx, corner_idx, distance), ...]
+    for loop_idx, (vert, uv) in enumerate(loop):
+        for corner_idx, corner in enumerate(corners):
+            dist = (uv - corner).length
+            distances.append((loop_idx, corner_idx, dist))
+
+    # Sort by distance to find best matches
+    distances.sort(key=lambda x: x[2])
+
+    used_loop_indices = set()
+    used_corner_indices = set()
+    corner_matches = []  # [(loop_idx, corner_idx), ...]
+
+    # Take closest matches, but don't reuse points or corners
+    for loop_idx, corner_idx, dist in distances:
+        if len(corner_matches) >= 4:
+            break
+        if loop_idx not in used_loop_indices and corner_idx not in used_corner_indices:
+            corner_matches.append((loop_idx, corner_idx))
+            used_loop_indices.add(loop_idx)
+            used_corner_indices.add(corner_idx)
+
+        # Instead of sorting by loop order, sort by corner order
+    corner_matches.sort(key=lambda x: x[1])  # Sort by corner_idx
+
+    # Get points in corner order
+    ordered_indices = [match[0] for match in corner_matches]
+    corner_points = [loop[i] for i in ordered_indices]
+
+    # Validate that corners aren't twisted (using original loop-order indices)
+    loop_order_indices = sorted(ordered_indices)
+
+    # Rotate to get sequential loop indices for validation
+    start_idx = loop_order_indices.index(min(ordered_indices))
+    loop_order_indices = (
+            loop_order_indices[start_idx:] +
+            loop_order_indices[:start_idx]
+    )
+
+    # Do the relative indices validation
+    relative_indices = []
+    first_idx = loop_order_indices[0]
+    for idx in loop_order_indices:
+        rel_idx = idx - first_idx
+        if rel_idx < 0:
+            rel_idx += len(loop)
+        relative_indices.append(rel_idx)
+
+    # Check if indices are monotonically increasing or decreasing
+    diffs = [relative_indices[i + 1] - relative_indices[i] for i in range(len(relative_indices) - 1)]
+    if not (all(d > 0 for d in diffs) or all(d < 0 for d in diffs)):
+        raise ValueError("Corner points are twisted in the boundary loop")
+
+    return corner_points, ordered_indices

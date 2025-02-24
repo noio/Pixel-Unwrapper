@@ -136,6 +136,46 @@ def calc_tris_2d_area(points):
     return fabs(0.5 * area)
 
 
+def get_nearest_point_on_rectangle(point: Vector, rect_min: Vector, rect_max: Vector) -> Vector:
+    """
+    Returns the nearest point on a rectangle to the given point.
+    Rectangle is defined by its min/max corners.
+    """
+    # First handle if point is closest to a corner
+    if point.x <= rect_min.x and point.y <= rect_min.y:
+        return Vector((rect_min.x, rect_min.y))  # bottom left
+    if point.x >= rect_max.x and point.y <= rect_min.y:
+        return Vector((rect_max.x, rect_min.y))  # bottom right
+    if point.x >= rect_max.x and point.y >= rect_max.y:
+        return Vector((rect_max.x, rect_max.y))  # top right
+    if point.x <= rect_min.x and point.y >= rect_max.y:
+        return Vector((rect_min.x, rect_max.y))  # top left
+
+    # Otherwise project to nearest edge
+    x = point.x
+    y = point.y
+
+    # Clamp to rectangle bounds
+    x = max(rect_min.x, min(rect_max.x, x))
+    y = max(rect_min.y, min(rect_max.y, y))
+
+    # Find which edge is closest
+    dist_left = abs(point.x - rect_min.x)
+    dist_right = abs(point.x - rect_max.x)
+    dist_bottom = abs(point.y - rect_min.y)
+    dist_top = abs(point.y - rect_max.y)
+
+    min_dist = min(dist_left, dist_right, dist_bottom, dist_top)
+
+    if min_dist == dist_left:
+        return Vector((rect_min.x, y))
+    if min_dist == dist_right:
+        return Vector((rect_max.x, y))
+    if min_dist == dist_bottom:
+        return Vector((x, rect_min.y))
+    return Vector((x, rect_max.y))
+
+
 def vert_between_edges(edge_a, edge_b):
     if edge_a.verts[0] in edge_b.verts:
         return edge_a.verts[0]

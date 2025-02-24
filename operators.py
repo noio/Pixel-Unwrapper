@@ -48,7 +48,7 @@ class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
         row.prop(self, "texture_size", text="Texture Size")
 
     def execute(self, context):
-        obj = context.edit_object
+        obj = context.view_layer.objects.active
 
         #################################################
         # CREATE NEW TEXTURE AND FILL WITH DEFAULT GRID #
@@ -1058,6 +1058,139 @@ class PIXUNWRAP_OT_uv_rot_90(bpy.types.Operator):
 
         # THIS INVALIDATES ALL FACE DATA, SO DO IT OUTSIDE OF MAIN LOOP
         lock_orientation(bm, [face.index for face in bm.faces if face.select], True)
+
+        bmesh.update_edit_mesh(obj.data)
+        return {"FINISHED"}
+
+
+class PIXUNWRAP_OT_rectify(bpy.types.Operator):
+    """Make selected UV islands more rectangular by snapping boundary vertices to their bounding rectangle"""
+
+    bl_idname = "view3d.pixunwrap_rectify"
+    bl_label = "Rectify"
+    bl_options = {"UNDO"}
+
+    deform_power: bpy.props.FloatProperty(default=4, name="Deform Power")
+
+
+    @classmethod
+    def poll(cls, context):
+        return poll_edit_mode_selected_faces_uvsync(context)
+
+    def execute(self, context):
+        obj = context.edit_object
+        bm = bmesh.from_edit_mesh(obj.data)
+        uv_layer = bm.loops.layers.uv.verify()
+
+        try:
+            texture = get_texture_for_faces(obj, (face for face in bm.faces if face.select))
+            texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
+        except MultipleMaterialsError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+
+        islands = get_islands_from_obj(obj, only_selected=True)
+
+        for island in islands:
+            boundary_loops = island.get_boundary_loops()
+            longest_loop = max(boundary_loops, key=calculate_loop_length)
+
+            min_uv = Vector((round(island.min.x * texture_size), round(island.min.y * texture_size))) / texture_size
+            max_uv = Vector((round(island.max.x * texture_size), round(island.max.y * texture_size))) / texture_size
+
+            corner_uvs = [
+                Vector((min_uv.x, min_uv.y)),  # bottom left
+                Vector((max_uv.x, min_uv.y)),  # bottom right
+                Vector((max_uv.x, max_uv.y)),  # top right
+                Vector((min_uv.x, max_uv.y)),  # top left
+            ]
+
+            corner_points, corner_indices = find_corner_points(longest_loop, corner_uvs)
+            # print(f"{[(v[0].index, v[1]) for v in corner_points]}")
+
+            # Track all moved vertices and their movements
+            moved_verts = {}  # vert -> (original_uv, new_uv)
+
+            print("MOVING CORNERS")
+
+            # First move corners to their rectangle positions
+            for i, (vert, original_uv) in enumerate(corner_points):
+                new_uv = corner_uvs[i]
+                moved_verts[vert] = (original_uv.copy(), new_uv)
+                for loop in island.get_loops_for_vert(vert):
+                    print(f"moving corner vert v{vert.index} {original_uv} to {new_uv}")
+                    loop[uv_layer].uv = new_uv
+
+            print("Moved Verts:")
+            for moved_vert, (before, after) in moved_verts.items():
+                print(f"v{moved_vert.index} moved from {before} => {after}")
+
+            print("MOVING EDGES")
+            print(f"Full boundary: {[v.index for (v,_) in longest_loop]}")
+            # Now handle points between corners
+            # We need to process each edge of our rectangle
+            for i in range(len(corner_indices)):
+                start_idx = corner_indices[i]
+                end_idx = corner_indices[(i + 1) % len(corner_indices)]
+
+                # if end_idx < start_idx:
+                #     # Find next corner after start_idx
+                #     print(
+                #         f"Wrapping around: points after {start_idx + 1}: {[v[0].index for v in longest_loop[start_idx + 1:]]}")
+                #     print(f"Plus points before {end_idx}: {[v[0].index for v in longest_loop[0:end_idx]]}")
+                #     next_corner = min(corner_indices, key=lambda x: x if x > start_idx else float('inf'))
+                #     between_points = longest_loop[start_idx + 1:next_corner] + longest_loop[0:end_idx]
+                # else:
+                #     print(
+                #         f"Direct slice {start_idx + 1}:{end_idx}: {[v[0].index for v in longest_loop[start_idx + 1:end_idx]]}")
+                #     between_points = longest_loop[start_idx + 1:end_idx]
+
+                # Get points between these corners (handling loop wraparound if needed)
+                if end_idx < start_idx:
+                    between_points = longest_loop[start_idx + 1:] + longest_loop[0:end_idx]
+                else:
+                    between_points = longest_loop[start_idx + 1: end_idx]
+
+                print(f"Aligning Edge Points {[v.index for (v,_) in between_points]}")
+
+                # For each point between corners, snap to closest rectangle edge
+                for vert, original_uv in between_points:
+                    new_uv = get_nearest_point_on_rectangle(original_uv, min_uv, max_uv)
+                    print(f"moving edge vert v{vert.index} {original_uv} to {new_uv}")
+
+                    for loop in island.get_loops_for_vert(vert):
+                        moved_verts[vert] = (original_uv.copy(), new_uv)
+                        loop[uv_layer].uv = new_uv
+
+            for moved_vert, (before, after) in moved_verts.items():
+                print(f"v{moved_vert.index} moved from {before} => {after}")
+
+            # Now adjust all other vertices based on weighted influence
+            for face in island.uv_faces:
+                for loop in face.face.loops:
+                    vert = loop.vert
+                    if vert not in moved_verts:  # Only process unmoved vertices
+                        current_uv = loop[uv_layer].uv
+                        total_weight = 0
+                        weighted_delta = Vector((0, 0))
+
+                        # Calculate influence from all moved vertices
+                        for moved_vert, (original_uv, new_uv) in moved_verts.items():
+                            dist = (current_uv - original_uv).length
+                            if dist < 0.0001:  # Avoid division by zero
+                                dist = 0.0001
+
+                            # Weight is inverse of distance squared
+                            weight = 1.0 / (dist ** self.deform_power)
+                            delta = new_uv - original_uv
+
+                            weighted_delta += delta * weight
+                            total_weight += weight
+
+                        if total_weight > 0:
+                            # Apply weighted average of all movements
+                            final_delta = weighted_delta / total_weight
+                            loop[uv_layer].uv = current_uv + final_delta
 
         bmesh.update_edit_mesh(obj.data)
         return {"FINISHED"}
