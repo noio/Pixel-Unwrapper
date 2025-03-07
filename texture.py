@@ -1,11 +1,8 @@
-import bpy
-
-from itertools import cycle, islice
 from math import ceil, floor
+
+import bpy
 from mathutils import Vector, Matrix
-
 from .common import RectInt, Vector2Int
-
 
 
 def copy_texture_region(texture, src_pos, size, dst_pos):

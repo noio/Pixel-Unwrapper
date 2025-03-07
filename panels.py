@@ -1,4 +1,5 @@
 import bpy
+from .operators import *
 
 from .common import get_first_texture_on_object
 
@@ -78,7 +79,7 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         col.operator("view3d.pixunwrap_unwrap_grid", icon="OUTLINER_OB_LATTICE")
         col.operator("view3d.pixunwrap_unwrap_basic", icon="SELECT_SET")
         # col.operator("view3d.pixunwrap_unwrap_extend", icon="SELECT_SUBTRACT")
-        col.operator("view3d.pixunwrap_unwrap_single_pixel", icon="GPBRUSH_FILL")
+        col.operator(PIXUNWRAP_OT_unwrap_single_pixel.bl_idname, icon=PIXUNWRAP_OT_unwrap_single_pixel.icon)
 
         col = box.column(align=False)
         col.scale_y = 1.5
@@ -223,4 +224,4 @@ class PIXUNWRAP_PT_paint_tools(bpy.types.Panel):
         box = layout.box()
         box.label(text="Texture Paint Tools")
         col = box.column(align=True)
-        col.operator("view3d.pixunwrap_swap_eraser", icon="GPBRUSH_ERASE_HARD")
+        col.operator(PIXUNWRAP_OT_swap_eraser.bl_idname, icon=PIXUNWRAP_OT_swap_eraser.icon)

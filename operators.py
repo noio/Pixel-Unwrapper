@@ -360,6 +360,11 @@ class PIXUNWRAP_OT_swap_eraser(bpy.types.Operator):
     bl_label = "Toggle Erase Alpha"
     bl_options = {"UNDO"}
 
+    if bpy.app.version >= (4, 3, 0):
+        icon = "BRUSH_DATA"
+    else:
+        icon = "GPBRUSH_ERASE_HARD"
+
     @classmethod
     def poll(cls, context):
         return context.active_object is not None and context.object.mode == "TEXTURE_PAINT"
@@ -836,6 +841,11 @@ class PIXUNWRAP_OT_unwrap_single_pixel(bpy.types.Operator):
     bl_idname = "view3d.pixunwrap_unwrap_single_pixel"
     bl_label = "Single Pixel (Fill)"
     bl_options = {"UNDO"}
+
+    if bpy.app.version >= (4, 3, 0):
+        icon = "CLIPUV_DEHLT"
+    else:
+        icon = "GPBRUSH_FILL"
 
     @classmethod
     def poll(cls, context):

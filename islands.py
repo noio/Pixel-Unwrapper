@@ -1,12 +1,10 @@
-from math import ceil, floor, fabs
 from collections import defaultdict
-from typing import Any, Optional, Generator
+from math import ceil, floor, fabs
+from typing import Optional
 
 import bmesh
 from bmesh.types import BMesh, BMFace
-
 from mathutils import Vector
-
 from .common import LOCK_ORIENTATION_ATTRIBUTE, Vector2Int, RectInt, any_pinned, elem_max, elem_min
 
 
