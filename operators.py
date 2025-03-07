@@ -116,7 +116,7 @@ class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
-        obj = context.edit_object
+        obj = context.view_layer.objects.active
 
         existing_texture = get_first_texture_on_object(obj)
 
@@ -564,8 +564,8 @@ class PIXUNWRAP_OT_repack_uvs(bpy.types.Operator):
                 self.report({"ERROR"}, ERROR_TEXTURE_DIRTY)
                 return {"CANCELLED"}
 
-            src_pixels = PixelArray(blender_image=self.texture)
-            dst_pixels = PixelArray(size=self.texture_size)
+            src_pixels = PixelArray(blender_image=texture)
+            dst_pixels = PixelArray(size=texture_size)
 
         for new_pos, old_rect, island, flip in zip(new_positions, old_rects, islands, need_flip):
             new_pos = Vector2Int(new_pos[0], new_pos[1])
@@ -602,8 +602,8 @@ class PIXUNWRAP_OT_repack_uvs(bpy.types.Operator):
         bmesh.update_edit_mesh(obj.data)
 
         if modify_texture:
-            self.texture.pixels = dst_pixels.pixels
-            self.texture.update()
+            texture.pixels = dst_pixels.pixels
+            texture.update()
 
         # texture.save()
         return {"FINISHED"}
@@ -1104,8 +1104,10 @@ class PIXUNWRAP_OT_rectify(bpy.types.Operator):
                 Vector((min_uv.x, max_uv.y)),  # top left
             ]
 
+
             corner_points, corner_indices = find_corner_points(longest_loop, corner_uvs)
             # print(f"{[(v[0].index, v[1]) for v in corner_points]}")
+            # print(f"\nCORNERS: {[(v[0].index, v[1]) for v in corner_points]}")
 
             # Track all moved vertices and their movements
             moved_verts = {}  # vert -> (original_uv, new_uv)
@@ -1117,12 +1119,24 @@ class PIXUNWRAP_OT_rectify(bpy.types.Operator):
                 new_uv = corner_uvs[i]
                 moved_verts[vert] = (original_uv.copy(), new_uv)
                 for loop in island.get_loops_for_vert(vert):
-                    # print(f"moving corner vert v{vert.index} {original_uv} to {new_uv}")
                     loop[uv_layer].uv = new_uv
 
             # print("Moved Verts:")
             # for moved_vert, (before, after) in moved_verts.items():
             #     print(f"v{moved_vert.index} moved from {before} => {after}")
+
+            # If the corner indices are in decreasing index order, 
+            # just flip the array. It's fine we don't use the corner ORDER anymore,
+            # we just want to know which points lie between the corners, 
+            # and 'get_nearest_on_rectangle uses the bounds only
+            sum_signs = sum(
+                (b > a) - (b < a)  # Equivalent to sign(b - a)
+                for a, b in zip(corner_indices, corner_indices[1:] + [corner_indices[0]])
+            )
+
+            # Reverse if the order is mostly decreasing
+            if sum_signs < 0:
+                corner_indices.reverse()
 
             # print("MOVING EDGES")
             # print(f"Full boundary: {[v.index for (v,_) in longest_loop]}")

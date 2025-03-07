@@ -27,13 +27,11 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         content = box.column()
 
         has_texture = (
-                context.view_layer.objects.active is not None
-                and get_first_texture_on_object(context.view_layer.objects.active) is not None
+            context.view_layer.objects.active is not None
+            and get_first_texture_on_object(context.view_layer.objects.active) is not None
         )
 
-        can_create_texture = (
-                context.view_layer.objects.active is not None and not has_texture
-        )
+        can_create_texture = context.view_layer.objects.active is not None and not has_texture
 
         row = content.row(align=True)
         # col.enabled = can_create_texture
@@ -73,15 +71,18 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         if not context.scene.tool_settings.use_uv_select_sync:
             warning = box.row()
             warning.alert = True  # Makes the text red
-            warning.label(text="\"UV Sync Selection\" must be enabled", icon='ERROR')
+            warning.label(text='"UV Sync Selection" must be enabled', icon="ERROR")
 
-        col = box.column(align=False)
+        col = box.column(align=True)
         col.scale_y = 1.5
-        col.operator("view3d.pixunwrap_unwrap_grid", icon="VIEW_ORTHO")
+        col.operator("view3d.pixunwrap_unwrap_grid", icon="OUTLINER_OB_LATTICE")
         col.operator("view3d.pixunwrap_unwrap_basic", icon="SELECT_SET")
         # col.operator("view3d.pixunwrap_unwrap_extend", icon="SELECT_SUBTRACT")
         col.operator("view3d.pixunwrap_unwrap_single_pixel", icon="GPBRUSH_FILL")
 
+        col = box.column(align=False)
+        col.scale_y = 1.5
+        col.operator("view3d.pixunwrap_hotspot", icon="MOD_UVPROJECT")
 
         #  __  __    ___               __
         # |__ |  \ |  |     |  | \  / (__'
@@ -92,15 +93,18 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         header = box.row()
         header.label(text="UV Editing")
 
-
         # Option 2: Bigger toggle with warning colors
         row = box.row()
         row.scale_y = 1.4  # Makes it bigger
         # row.alert = True  # Red warning color
-        row.prop(context.scene, "pixunwrap_modify_texture",
-                 icon='ERROR')  # or ERROR/WARNING icon
+        row.prop(context.scene, "pixunwrap_modify_texture", icon="ERROR")  # or ERROR/WARNING icon
 
         modify_texture = context.scene.pixunwrap_modify_texture
+
+        col = box.column(align=True)
+        col.enabled = not modify_texture
+        col.operator("view3d.pixunwrap_set_uv_texel_density", icon="MOD_MESHDEFORM")
+        col.operator("view3d.pixunwrap_rectify", icon="MOD_BEVEL")
 
         ###################
         # FLIP AND ROTATE #
@@ -143,23 +147,9 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         # OTHER UV OPERATORS #
         ######################
         # These operators can NEVER preserve texturing
-        col = box.column()
-        row = col.row()
-        row.enabled = not modify_texture
-        op = row.operator("view3d.pixunwrap_set_uv_texel_density", icon="MOD_MESHDEFORM")
 
-        row = col.row(align=True)
-        row.enabled = not modify_texture
-        op = row.operator("view3d.pixunwrap_stack_islands", icon="DUPLICATE")
 
-        row = col.row(align=True)
-        row.enabled = not modify_texture
-        op = row.operator("view3d.pixunwrap_rectify", icon="MESH_PLANE")
-
-        row = col.row(align=True)
-        row.enabled = not modify_texture
-        op = row.operator("view3d.pixunwrap_hotspot", icon="MESH_PLANE")
-
+        col =box.column(align=True)
         row = col.row(align=True)
         row.enabled = not modify_texture
         op = row.operator("view3d.pixunwrap_nudge_islands", icon="BACK", text="")
@@ -177,16 +167,17 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
         row.separator()
         row.label(text="Nudge")
 
-        row = col.row()
-        row.enabled = not modify_texture
-        op = row.operator("view3d.pixunwrap_randomize_islands", icon="PIVOT_BOUNDBOX")
+        col = box.column(align = True)
+        col.enabled = not modify_texture
+        col.operator("view3d.pixunwrap_stack_islands", icon="DUPLICATE")
+        col.operator("view3d.pixunwrap_randomize_islands", icon="PIVOT_BOUNDBOX")
 
-        op = col.row().operator(
-            "view3d.pixunwrap_island_to_free_space", icon="UV_ISLANDSEL"
-        )
+
+        col = box.column(align=True)
+        op = col.operator("view3d.pixunwrap_island_to_free_space", icon="UV_ISLANDSEL")
         op.modify_texture = modify_texture
 
-        op = col.row().operator("view3d.pixunwrap_repack_uvs", icon="ALIGN_BOTTOM")
+        op = col.operator("view3d.pixunwrap_repack_uvs", icon="ALIGN_BOTTOM")
         op.modify_texture = modify_texture
 
         # ___  __     ___       __   __     __    _        __
@@ -205,11 +196,11 @@ class PIXUNWRAP_PT_uv_tools(bpy.types.Panel):
             texture_name = None
             if obj.active_material and obj.active_material.use_nodes:
                 for node in obj.active_material.node_tree.nodes:
-                    if node.type == 'TEX_IMAGE' and node.image:
+                    if node.type == "TEX_IMAGE" and node.image:
                         texture_name = node.image.name
                         break
             if source_uv and texture_name:
-                buttonlabel = f"Bake into \"{texture_name}\""
+                buttonlabel = f'Bake into "{texture_name}"'
                 box.label(text=f"'{source_uv.name}' -> '{target_uv.name}'")
         else:
             box.label(text="Select an object that has 2 UV maps")
