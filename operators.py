@@ -174,74 +174,121 @@ class PIXUNWRAP_OT_resize_texture(bpy.types.Operator):
     bl_options = {"UNDO"}
 
     scale: bpy.props.FloatProperty(default=2)
-    only_update_uvs_on_active: bpy.props.BoolProperty(default=True)
+    # only_update_uvs_on_active: bpy.props.BoolProperty(default=True)
+
+
+    def _validate(self, context):
+        obj = context.edit_object
+        bm = bmesh.from_edit_mesh(obj.data)
+
+        # do validation first
+        self._selected_faces = [face for face in bm.faces if face.select]
+        try:
+            self._texture = get_texture_for_faces(obj, self._selected_faces)
+            self._texture_size = self._texture.size[0] if self._texture is not None else context.scene.pixunwrap_default_texture_size
+        except MultipleMaterialsError as e:
+            self.report({"ERROR"}, str(e))
+            return False
+
+        if self._texture is None:
+            self.report({"ERROR"}, ERROR_NO_MATERIAL_OR_NO_TEXTURE)
+            return False
+
+        material_index = self._selected_faces[0].material_index
+        # Check if any face using this material is unselected
+        if any(face.material_index == material_index and not face.select for face in bm.faces):
+            self.report({"ERROR"}, ERROR_SELECT_ALL_FACES_USING_MATERIAL)
+            return False
+
+        if self._texture.is_dirty:
+            self.report({"ERROR"}, ERROR_TEXTURE_DIRTY)
+            return False
+
+        self._new_size = round(self._texture_size * self.scale)
+
+        if self._new_size < 4:
+            self.report({"ERROR"}, "That's too small.")
+            return False
+
+        if self._new_size > 8192:
+            self.report({"ERROR"}, f"New texture would be {self._new_size} pixels, that's probably too big.")
+            return False
+
+        return True
 
     @classmethod
     def poll(cls, context):
         return poll_edit_mode_selected_faces_uvsync(context)
 
+    def invoke(self, context, event):
+        if not self._validate(context):
+            return {'CANCELLED'}
+
+        self._objects_sharing_texture = get_all_objects_with_texture(context, self._texture)
+
+        if (len(self._objects_sharing_texture) > 1):
+            return context.window_manager.invoke_props_dialog(self)
+
+        return self.execute(context)
+
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="Other objects use this texture:")
+        box = layout.box()
+        for obj in self._objects_sharing_texture:
+            box.label(text=f"- {obj.name}")
+
+        col = layout.column(align=True)
+        lines = [
+            "Resizing the texture will NOT update",
+            "UVs on other objects. UV maps on other",
+            "objects will become incorrect.",
+        ]
+
+        for line in lines:
+            row = col.row(align=True)
+            row.scale_y = 0.6
+            row.label(text=line)
+
+        layout.label(text="Do you want to continue?")
+
     def execute(self, context):
         obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
 
-        selected_faces = [face for face in bm.faces if face.select]
-        try:
-            texture = get_texture_for_faces(obj, selected_faces)
-            texture_size = texture.size[0] if texture is not None else context.scene.pixunwrap_default_texture_size
-        except MultipleMaterialsError as e:
-            self.report({"ERROR"}, str(e))
-            return {"CANCELLED"}
-
-        if texture is None:
-            self.report({"ERROR"}, ERROR_NO_MATERIAL_OR_NO_TEXTURE)
-            return {"CANCELLED"}
-
-        material_index = selected_faces[0].material_index
-        # Check if any face using this material is unselected
-        if any(face.material_index == material_index and not face.select for face in bm.faces):
-            self.report({"ERROR"}, ERROR_SELECT_ALL_FACES_USING_MATERIAL)
-            return {"CANCELLED"}
-
-        if texture.is_dirty:
-            self.report({"ERROR"}, ERROR_TEXTURE_DIRTY)
-            return {"CANCELLED"}
-
-        new_size = round(texture_size * self.scale)
-
-        if new_size < 16:
-            self.report({"ERROR"}, "That's too small.")
-            return {"CANCELLED"}
-
-        if new_size > 8192:
-            self.report({"ERROR"}, f"New texture would be {new_size} pixels, that's probably too big.")
+        if not self._validate(context):
             return {"CANCELLED"}
 
         # SCALE UP THE TEXTURE AND PRESERVE THE DATA
         # WHEN SCALING DOWN, TEXTURE IS CROPPED TO BOTTOM LEFT
-        src_pixels = PixelArray(blender_image=texture)
-        dst_pixels = PixelArray(size=new_size)
+        src_pixels = PixelArray(blender_image=self._texture)
+        dst_pixels = PixelArray(size=self._new_size)
 
         copy_region_size = Vector2Int(dst_pixels.width, dst_pixels.height)
         dst_pixels.copy_region(src_pixels, Vector2Int(0, 0), copy_region_size, Vector2Int(0, 0))
 
-        texture.scale(new_size, new_size)
-        texture.pixels = dst_pixels.pixels
-        texture.update()
+        self._texture.scale(self._new_size, self._new_size)
+        self._texture.pixels = dst_pixels.pixels
+        self._texture.update()
 
         # UPDATE THE UVS TO SPAN THE SAME PIXELS
         # FIND ALL OBJECTS THAT USE THE SAME TEXTURE:
         # (if option enabled, otherwise just do it on active object)
-        objs_to_update_uvs = [obj] if self.only_update_uvs_on_active else get_all_objects_with_texture(context, texture)
+        # this feature is removed for now because we'd have to scan those objects for
+        # use of the same material.
+        # objs_to_update_uvs = [obj] if self.only_update_uvs_on_active else get_all_objects_with_texture(context, texture)
 
-        actual_scale_inv = texture_size / new_size
+        actual_scale_inv = self._texture_size / self._new_size
 
-        for obj_to_update in objs_to_update_uvs:
-            bm = get_bmesh(obj_to_update)
+        # for obj_to_update in objs_to_update_uvs:
+        #     bm = get_bmesh(obj_to_update)
 
-            uv_layer = bm.loops.layers.uv.verify()
-            uvs_scale(bm.faces, uv_layer, actual_scale_inv)
+        uv_layer = bm.loops.layers.uv.verify()
+        uvs_scale(self._selected_faces, uv_layer, actual_scale_inv)
 
-            update_and_free_bmesh(obj_to_update, bm)
+        bmesh.update_edit_mesh(obj.data)
+        # update_and_free_bmesh(obj_to_update, bm)
 
         return {"FINISHED"}
 
@@ -471,7 +518,7 @@ class PIXUNWRAP_OT_island_to_free_space(bpy.types.Operator):
                     self.report({"ERROR"}, ERROR_TEXTURE_DIRTY)
                     return {"CANCELLED"}
 
-                copy_texture_region(self.texture, old_pos, pixel_bounds_old.size, new_pos)
+                copy_texture_region(texture, old_pos, pixel_bounds_old.size, new_pos)
 
             offset = (new_pos - old_pos) / texture_size
             faces = island.get_faces()
@@ -532,7 +579,7 @@ class PIXUNWRAP_OT_repack_uvs(bpy.types.Operator):
             return {"CANCELLED"}
 
         # FIND ISLANDS
-        islands = get_islands_from_obj(obj, False)
+        islands = get_islands_from_obj(obj, True)
         islands = merge_overlapping_islands(islands)
 
         sizes = []
@@ -1253,7 +1300,10 @@ class PIXUNWRAP_OT_hotspot(bpy.types.Operator):
 
         best_bounds = []  # List of (position, size, flipped) tuples
         best_diff = float("inf")
-        size_threshold = 1.0 / texture_size  # Threshold for "similar enough" sizes
+        size_threshold = 0; #1.0 / texture_size  # Threshold for "similar enough" sizes
+
+        ideal = island_size * texture_size
+        print(f"Ideal:  {ideal.x:.0f}x{ideal.y:.0f}")
 
         for position, size in hotspot_bounds:
             # Check both normal and transposed orientations
@@ -1263,22 +1313,29 @@ class PIXUNWRAP_OT_hotspot(bpy.types.Operator):
             ]
 
             for check_size, is_flipped in sizes_to_check:
+            
                 size_diff = (check_size - island_size).length
-                # print(f"{island_size=} {check_size=} {size_diff=} {is_flipped=}")
+                cs = check_size * texture_size
 
                 if size_diff < best_diff - size_threshold:
+                    # print(f"MUCH BETTER: {cs.x:.0f}x{cs.y:.0f} D:{size_diff:.2f} {is_flipped=}")
                     # Found much better match, clear list and start new
                     best_bounds = [(position, size, is_flipped)]
                     best_diff = size_diff
                 elif abs(size_diff - best_diff) <= size_threshold:
                     # Similar enough to best, add to candidates
+                    # print(f"CANDIDATE: {cs.x:.0f}x{cs.y:.0f} D:{size_diff:.2f} {is_flipped=}")
                     best_bounds.append((position, size, is_flipped))
 
         if best_bounds:
-            print(f"picking from {len(best_bounds)}")
+            # print(f"picking from {len(best_bounds)}")
             # Pick random candidate
+
             position, size, is_flipped = random.choice(best_bounds)
 
+            ideal = island_size * texture_size
+            used = size * texture_size
+            self.report({"INFO"}, f"Ideal Size: {ideal.x:.0f}x{ideal.y:.0f}. Used: {used.x:.0f}x{used.y:.0f}")
 
             # Calculate centers
             island_center = island.min + island_size / 2

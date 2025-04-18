@@ -57,12 +57,16 @@ def register():
         default=[0.92, 0.69, 0.69],
         description="Color used to fill top left quadrant of empty texture",
         subtype="COLOR",
+        min=0,
+        max=1
     )
     bpy.types.Scene.pixunwrap_texture_fill_color_bl = bpy.props.FloatVectorProperty(
         name="Texture Fill B",
         default=[0.72, 0.72, 0.84],
         description="Color used to fill bottom left quadrant of empty texture",
         subtype="COLOR",
+        min=0,
+        max=1
     )
 
     bpy.types.Scene.pixunwrap_texture_fill_color_tr = bpy.props.FloatVectorProperty(
@@ -70,6 +74,8 @@ def register():
         default=[0.64, 0.91, 0.64],
         description="Color used to fill top right quadrant of empty texture",
         subtype="COLOR",
+        min=0,
+        max=1
     )
     # YELLOW
     bpy.types.Scene.pixunwrap_texture_fill_color_br = bpy.props.FloatVectorProperty(
@@ -77,6 +83,8 @@ def register():
         default=[1, 0.79, 0.48],
         description="Color used to fill bottom right quadrant of empty texture",
         subtype="COLOR",
+        min=0,
+        max=1
     )
 
     uv_behaviors = (

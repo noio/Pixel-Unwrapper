@@ -12,7 +12,7 @@ from mathutils import Vector, Matrix
 ERROR_MULTIPLE_MATERIALS = "Faces have different materials"
 ERROR_TEXTURE_DIRTY = f"Please save texture first, because undo doesn't work for textures."
 ERROR_NO_TEXTURE_SPACE = f'Not enough space to preserve texture data. Resize texture or turn off "Modify Texture"'
-ERROR_SELECT_ALL_FACES_USING_MATERIAL = "Please select ALL faces using the material with the texture you want to resize"
+ERROR_SELECT_ALL_FACES_USING_MATERIAL = "Please select ALL faces using the target material"
 ERROR_NO_MATERIAL_OR_NO_TEXTURE = "Selected faces have no material or no texture was found on the material"
 
 
@@ -406,6 +406,7 @@ def get_texture_for_faces(obj, faces):
         raise MultipleMaterialsError(ERROR_MULTIPLE_MATERIALS)
 
     return get_texture_from_material_index(obj, material_index)
+
 
 def get_texture_from_material_index(obj, material_index):
     # Early returns if no valid material
