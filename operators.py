@@ -602,17 +602,12 @@ class PIXUNWRAP_OT_repack_uvs(bpy.types.Operator):
                 self.report({"ERROR"}, "Selected faces use more than one texture.")
                 return {"CANCELLED"}
 
-            # Disallow pixel writes when more than one object is involved
-            if modify_texture and len(edit_objs) > 1:
-                self.report({"ERROR"}, "modify_texture is not supported with multiple objects selected.")
-                return {"CANCELLED"}
-
             mat_idx = sel_faces[0].material_index
             if any(f.material_index == mat_idx and not f.select for f in bm.faces):
                 self.report({"ERROR"}, ERROR_SELECT_ALL_FACES_USING_MATERIAL)
                 return {"CANCELLED"}
 
-            if tex.is_dirty:
+            if tex.is_dirty and modify_texture:
                 self.report({"ERROR"}, ERROR_TEXTURE_DIRTY)
                 return {"CANCELLED"}
 
