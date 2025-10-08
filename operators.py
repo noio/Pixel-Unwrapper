@@ -32,29 +32,35 @@ class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
     bl_label = "Create Texture"
     bl_options = {"UNDO"}
 
+    new_name: bpy.props.StringProperty(name="New Name", default="new_name")
     texture_size: bpy.props.IntProperty(default=64)
+
 
     @classmethod
     def poll(cls, context):
         obj = context.view_layer.objects.active
-        return obj is not None and get_first_texture_on_object(obj) is None
+        return obj is not None
 
     def invoke(self, context, event):
         self.texture_size = context.scene.pixunwrap_default_texture_size
+        self.new_name = get_texture_name(context.view_layer.objects.active.name)
         return context.window_manager.invoke_props_dialog(self)
 
-    def draw(self, context):
-        row = self.layout
-        row.prop(self, "texture_size", text="Texture Size")
+
+    # def draw(self, context):
+    #     row = self.layout
+    #     row.prop(self, "texture_size", text="Texture Size")
 
     def execute(self, context):
         obj = context.view_layer.objects.active
+        new_texture_name = self.new_name
+        new_path = f"//Textures/{new_texture_name}.png"
 
         #################################################
         # CREATE NEW TEXTURE AND FILL WITH DEFAULT GRID #
         #################################################
         new_texture = bpy.data.images.new(
-            name=get_texture_name(obj.name),
+            name=new_texture_name,
             width=self.texture_size,
             height=self.texture_size,
             alpha=True,
@@ -62,6 +68,12 @@ class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
 
         pixels = PixelArray(None, self.texture_size)
         new_texture.pixels = pixels.pixels
+
+        new_texture.pack()
+        new_texture.filepath = new_path
+        new_texture.filepath_raw = new_path  # dissociate from original linked image
+        new_texture.save()
+        new_texture.unpack(method="REMOVE")
 
         ##############################
         # SET UV EDITOR TO NEW IMAGE #
@@ -73,12 +85,9 @@ class PIXUNWRAP_OT_create_texture(bpy.types.Operator):
         ##########################
         # GET OR CREATE MATERIAL #
         ##########################
-        mat = obj.active_material
-
-        if mat is None:
-            name = get_material_name(obj.name)
-            mat = bpy.data.materials.new(name=name)
-            obj.data.materials.append(mat)
+        name = get_material_name(obj.name)
+        mat = bpy.data.materials.new(name=name)
+        obj.data.materials.append(mat)
 
         # Set up shader nodes
         mat.use_nodes = True
@@ -112,7 +121,7 @@ class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
         return obj is not None and get_first_texture_on_object(obj) is not None
 
     def invoke(self, context, event):
-        self.new_name = context.view_layer.objects.active.name
+        self.new_name = get_texture_name(context.view_layer.objects.active.name)
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
@@ -123,7 +132,7 @@ class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
         #####################
         # DUPLICATE TEXTURE #
         #####################
-        new_texture_name = get_texture_name(self.new_name)
+        new_texture_name = self.new_name
         new_path = f"//Textures/{new_texture_name}.png"
 
         # new_texture = existing_texture.save_as(False,True,filepath=new_path)
