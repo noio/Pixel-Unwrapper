@@ -25,7 +25,7 @@ bl_info = {
     "author": "Thomas 'noio' van den Berg",
     "description": "",
     "blender": (4, 3, 0),
-    "version": (0, 3, 0),
+    "version": (0, 3, 1),
     "location": "",
     "warning": "",
     "category": "Generic",
