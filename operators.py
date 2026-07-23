@@ -121,7 +121,7 @@ class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
         return obj is not None and get_first_texture_on_object(obj) is not None
 
     def invoke(self, context, event):
-        self.new_name = get_texture_name(context.view_layer.objects.active.name)
+        self.new_name = context.view_layer.objects.active.name
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
@@ -132,7 +132,7 @@ class PIXUNWRAP_OT_duplicate_texture(bpy.types.Operator):
         #####################
         # DUPLICATE TEXTURE #
         #####################
-        new_texture_name = self.new_name
+        new_texture_name = get_texture_name(self.new_name)
         new_path = f"//Textures/{new_texture_name}.png"
 
         # new_texture = existing_texture.save_as(False,True,filepath=new_path)
